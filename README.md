@@ -11,7 +11,7 @@ The converter itself is written in kotlin.
 Generate a Hello World in WASM:
 
 ```bash
-echo -e "#include <stdio.h>\nint main() { printf(\"hello world\\\n\"); return 0; }" > hello.c
+echo -e "#include <stdio.h>\nint main() { printf(\"hello world\\\n\"); for (int n = 0; n < 10; n++) printf(\"%d,\", n); printf(\"\\\n\"); return 0; }" > hello.c
 docker run --rm -v $(pwd):/src -t apiaryio/emcc emconfigure emcc hello.c -o hello -O3 -s WASM=1
 ```
 
