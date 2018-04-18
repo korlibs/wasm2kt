@@ -1,14 +1,15 @@
 import java.nio.*
 import java.nio.charset.*
 
-open class WasmModule {
-    //val heap = ByteBuffer.allocate(32 * 1024).order(ByteOrder.nativeOrder())
-    //val heap = ByteBuffer.allocate(2048).order(ByteOrder.nativeOrder())
-    val heap = ByteBuffer.allocate(16 * 1024 * 1024).order(ByteOrder.nativeOrder())
+open class WasmModule @JvmOverloads constructor(
+    val heapSize: Int = 16 * 1024 * 1024, // 16 MB
+    val stackSize: Int = 32 * 1024 // 32 KB
+) {
+    val heap = ByteBuffer.allocate(heapSize).order(ByteOrder.nativeOrder())
 
     @JvmField var ABORT = -1
     @JvmField var DYNAMICTOP_PTR = 0
-    @JvmField var STACK_INITIAL_SIZE = 32 * 1024
+    @JvmField var STACK_INITIAL_SIZE = stackSize
     //@JvmField var STACK_INITIAL_SIZE = 15 * 1024 * 1024
     @JvmField var STACK_MAX = heap.limit()
     @JvmField var STACKTOP = STACK_MAX - STACK_INITIAL_SIZE
