@@ -1,3 +1,13 @@
+### Summary
+
+This project allows to convert WASM (Web Assembly) from its binary format into Kotlin code.
+This allow for example to compile C or C++ libraries and use them in Kotlin common
+in any supported target including JVM, JS and Native.
+
+The converter itself is written in kotlin.
+
+### How to use
+
 Generate a Hello World in WASM:
 
 ```bash
