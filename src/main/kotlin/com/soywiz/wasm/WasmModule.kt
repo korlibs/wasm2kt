@@ -245,6 +245,10 @@ open class WasmModule @JvmOverloads constructor(
         for (n in 0 until data.size) heap.put(address + n, data[n])
     }
 
+    fun _abort(value: Int = 0): Unit {
+        throw RuntimeException("ABORT $value")
+    }
+
     fun abort(value: Int): Unit {
         throw RuntimeException("ABORT $value")
     }

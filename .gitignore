@@ -1,5 +1,6 @@
 /.gradle
 /.idea
+/*.class
 *.iml
 *.ipr
 *.iws
@@ -9,5 +10,6 @@
 /hello.c
 /hello.js
 /hello.js.map
+/hello.kt
 /hello.wasm
 
