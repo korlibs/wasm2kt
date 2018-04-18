@@ -1,3 +1,5 @@
+package com.soywiz.wasm
+
 import com.soywiz.korio.*
 import com.soywiz.korio.error.*
 import com.soywiz.korio.lang.*
@@ -7,20 +9,15 @@ import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.set
 
-fun main(args: Array<String>) = Korio {
-    //val data = resourcesVfs["hello.wasm"].readAll().openSync()
-    //val data = resourcesVfs["hello2.wasm"].readAll().openSync()
-    //val data = resourcesVfs["hellof.wasm"].readAll().openSync() // fails
-    //val data = resourcesVfs["small.wasm"].readAll().openSync()
-    //val data = resourcesVfs["loop.wasm"].readAll().openSync()
-    //val data = resourcesVfs["malloc.wasm"].readAll().openSync()
-    val data = resourcesVfs["pi.wasm"].readAll().openSync()
-    //val data = resourcesVfs["small.debug.wasm"].readAll().openSync()
-    Wasm.read(data)
-}
-
 class Wasm {
     companion object {
+        @JvmStatic
+        fun main(args: Array<String>) = Korio {
+            val file = args.firstOrNull() ?: error("wasm2kt <file.wasm>")
+            val data = file.uniVfs.readAll().openSync()
+            Wasm.read(data)
+        }
+
         fun read(s: SyncStream) {
             return Wasm().read(s)
         }
@@ -379,7 +376,12 @@ class Wasm {
         }
     }
 
-    data class Global(val globalType: WasmType.Global, val index: Int, val e: Expr? = null, var import: Import? = null) {
+    data class Global(
+        val globalType: WasmType.Global,
+        val index: Int,
+        val e: Expr? = null,
+        var import: Import? = null
+    ) {
         val name get() = import?.name ?: "g$index"
     }
 
@@ -453,6 +455,7 @@ class Wasm {
             val paramFloat get() = param as Float
             val paramDouble get() = param as Double
         }
+
         data class InsMemarg(override val op: Ops, val align: Int, val offset: Int) : Instruction
     }
 
@@ -470,7 +473,13 @@ class Wasm {
     //    div, min, max, copysign // add, sub, mul,
     //}
 
-    enum class Ops(val id: Int, val istack: Int = -1, val rstack: Int = -1, val symbol: String = "<?>", val outType: WasmType = WasmType.void) {
+    enum class Ops(
+        val id: Int,
+        val istack: Int = -1,
+        val rstack: Int = -1,
+        val symbol: String = "<?>",
+        val outType: WasmType = WasmType.void
+    ) {
         //Op_i32(0x7f),
         //Op_i64(0x7e),
         //Op_f32(0x7d),

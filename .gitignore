@@ -1,4 +1,8 @@
 /.gradle
+/.idea
+*.iml
+*.ipr
+*.iws
 /build
 /out
 /hello

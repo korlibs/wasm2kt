@@ -1,3 +1,5 @@
+package com.soywiz.wasm
+
 import com.soywiz.korio.error.*
 
 /*

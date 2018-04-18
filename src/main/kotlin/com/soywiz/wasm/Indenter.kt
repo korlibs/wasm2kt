@@ -1,3 +1,5 @@
+package com.soywiz.wasm
+
 object INDENTS {
     private val INDENTS = arrayListOf<String>("")
 
