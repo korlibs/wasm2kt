@@ -6,7 +6,7 @@ in any supported target including JVM, JS and Native.
 
 The converter itself is written in kotlin.
 
-### How to use
+### How to use
 
 Generate a Hello World in WASM:
 
