@@ -348,11 +348,13 @@ class JavaExporter(val wasm: Wasm) : Exporter {
             //}
 
             //val funcs = module.functions.values.joinToString(", ") { "this::${it.name}" }
-            val funcToIdx = module.elements.flatMap { it.funcIdxs }
-                .map { (module.functions[it] ?: invalidOp("Invalid referenced function $it")) to it }
+            val funcToIdx = module.elements.flatMap { it.funcIdxs }.withIndex()
+                .map { (module.functions[it.value] ?: invalidOp("Invalid referenced function $it")) to it.index }
                 .toMap()
             //.joinToString(", ") { createDynamicFunction(it.type, it.name) }
             //line("Object[] functions = new Object[] { $funcs };")
+
+            //println(funcToIdx)
 
             for ((type, functions) in module.functions.values.groupBy { it.type }) {
                 //val funcs = functions.joinToString(", ") { "this::${it.name}" }
