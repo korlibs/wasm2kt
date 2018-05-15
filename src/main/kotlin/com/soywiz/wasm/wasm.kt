@@ -5,21 +5,60 @@ import com.soywiz.korio.error.*
 import com.soywiz.korio.lang.*
 import com.soywiz.korio.stream.*
 import com.soywiz.korio.vfs.*
+import java.io.*
+import java.util.*
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.set
 
 class Wasm {
+    object EncodeWasm {
+        @JvmStatic
+        fun main(args: Array<String>) = Korio {
+            val data = resourcesVfs["encode.wasm"].readAll().openSync()
+            //val data = resourcesVfs["hello.wasm"].readAll().openSync()
+            File("/tmp/Module.java").writeText(Wasm.readAndConvert(data, "java").toString())
+        }
+    }
+
     companion object {
         @JvmStatic
         fun main(args: Array<String>) = Korio {
-            val file = args.firstOrNull() ?: error("wasm2kt <file.wasm>")
+            val margs = LinkedList<String>(args.toList())
+            var showHelp = false
+            var lang: String = "kotlin"
+            var file: String? = null
+            if (margs.isEmpty()) showHelp = true
+            while (margs.isNotEmpty()) {
+                val arg = margs.removeFirst()
+                if (arg.startsWith("-")) {
+                    when (arg) {
+                        "-out" -> {
+                            lang = margs.removeFirst()
+                        }
+                        "-h", "-help", "--help", "-?" -> {
+                            showHelp = true
+                        }
+                    }
+                } else {
+                    file = arg
+                }
+            }
+            if (showHelp || file == null) error("wasm2kt [-out java] <file.wasm>")
             val data = file.uniVfs.readAll().openSync()
-            Wasm.read(data)
+            println(Wasm.readAndConvert(data, lang))
         }
 
-        fun read(s: SyncStream) {
-            return Wasm().read(s)
+        fun readAndConvert(s: SyncStream, lang: String): Indenter {
+            val wasm = Wasm()
+            wasm.read(s)
+            val exporter = when (lang) {
+                "kotlin" -> KotlinExporter(wasm)
+                "java" -> JavaExporter(wasm)
+                else -> error("Unsupported exporter '$lang'. Only supported 'java' and 'kotlin'.")
+            }
+            //val exporter = JavaExporter(this@Wasm)
+            return exporter.dump()
         }
     }
 
@@ -60,9 +99,6 @@ class Wasm {
         readS32_le()
         while (!eof) readSection()
 
-        val exporter = KotlinExporter(this@Wasm)
-        //val exporter = JavaExporter(this@Wasm)
-        println(exporter.dump())
 
         /*
         for ((index, function) in functions) {

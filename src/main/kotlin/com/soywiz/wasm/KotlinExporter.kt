@@ -2,9 +2,9 @@ package com.soywiz.wasm
 
 import com.soywiz.korio.error.*
 
-class KotlinExporter(val wasm: Wasm) {
+class KotlinExporter(val wasm: Wasm) : Exporter {
     val module = wasm
-    fun dump(): Indenter = Indenter {
+    override fun dump(): Indenter = Indenter {
         //line("@Suppress(\"UNCHECKED_CAST\")")
         //line("@Suppress(\"UNCHECKED_CAST\", \"UNREACHABLE_CODE\")")
         line("@Suppress(\"UNCHECKED_CAST\", \"UNREACHABLE_CODE\", \"RedundantExplicitType\", \"UNUSED_VARIABLE\", \"VARIABLE_WITH_REDUNDANT_INITIALIZER\", \"CanBeVal\", \"RedundantUnitReturnType\", \"unused\", \"SelfAssignment\", \"ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE\", \"UNUSED_VALUE\", \"SelfAssignment\", \"LiftReturnOrAssignment\", \"LocalVariableName\", \"FunctionName\")")
@@ -22,14 +22,21 @@ class KotlinExporter(val wasm: Wasm) {
                     }
                 }
             }
+            val indices = LinkedHashMap<Int, String>()
             for (data in wasm.datas) {
-                line("private fun computeDataIndex${data.index}(): Int") {
-                    line(data.e.toAst(wasm, Wasm.WasmFunc(wasm, -1, INT_FUNC_TYPE)).dump())
+                val ast = data.e.toAst(wasm, Wasm.WasmFunc(wasm, -1, INT_FUNC_TYPE))
+                if (ast is A.RETURN && ast.expr is A.Const) {
+                    indices[data.index] = "${ast.expr.value}"
+                } else {
+                    line("private fun computeDataIndex${data.index}(): Int") {
+                        line(ast.dump())
+                    }
+                    indices[data.index] = "computeDataIndex${data.index}()"
                 }
             }
             line("init") {
                 for (data in wasm.datas) {
-                    line("__putBytes(computeDataIndex${data.index}(), byteArrayOf(${data.data.joinToString(", ") { "$it" }}))")
+                    line("__putBytes(${indices[data.index]}, byteArrayOf(${data.data.joinToString(", ") { "$it" }}))")
                 }
             }
             for (global in module.globals.values) {

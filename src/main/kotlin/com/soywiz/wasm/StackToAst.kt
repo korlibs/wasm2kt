@@ -379,8 +379,14 @@ interface A {
 
     data class Phi(override val type: Wasm.WasmType) : Expr
 
+    companion object {
+        fun Stms(stms: List<Stm>): Stm {
+            return if (stms.size == 1) stms[0] else Stms(true, stms)
+        }
+    }
+
     interface Stm : A
-    data class Stms(val stms: List<Stm>) : Stm
+    data class Stms(val dummy: Boolean, val stms: List<Stm>) : Stm
     data class IF(val label: AstLabel, val cond: Expr, val btrue: Stm) : Stm
     data class IF_ELSE(val label: AstLabel, val cond: Expr, val btrue: Stm, val bfalse: Stm) : Stm
     data class BLOCK(val label: AstLabel, val stm: Stm) : Stm
@@ -407,6 +413,9 @@ interface A {
     data class SetPhi(val blockType: Wasm.WasmType, val value: A.Expr) : Stm
     class RETURN_VOID() : Stm
 }
+
+fun A.Stm.first() = if (this is A.Stms) this.stms.first() else this
+fun A.Stm.last() = if (this is A.Stms) this.stms.last() else this
 
 data class AstLocal(val wasm: Wasm, val index: Int, val type: Wasm.WasmType) {
     val name by lazy { "l$index" }
