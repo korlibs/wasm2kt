@@ -6,20 +6,6 @@ import com.soywiz.korio.vfs.*
 import kotlin.test.*
 
 class IntegrationTest {
-    //val root = tempVfs
-    val root = "/tmp".uniVfs
-    //val JDK_IMAGE = "jboss/base-jdk:8"
-    //val GCC_IMAGE = "gcc:8.1.0"
-    //val EMCC_IMAGE = "apiaryio/emcc"
-    //val EMCC_IMAGE = "apiaryio/emcc:1.34"
-    val JDK_IMAGE = "openjdk:8-jdk-alpine3.7"
-    val GCC_IMAGE = "frolvlad/alpine-gcc:latest"
-    val EMCC_IMAGE = "apiaryio/emcc:1.37"
-
-    init {
-        println("ROOT: " + root.absolutePath)
-    }
-
     @Test
     fun testSimpleIntegrationTest() {
         assertGccAndJavaExecutionAreEquals(
@@ -33,6 +19,38 @@ class IntegrationTest {
             }
             """
         )
+    }
+
+    @Test
+    fun testTime() {
+        assertGccAndJavaExecutionAreEquals(
+            """
+            #include <stdio.h>
+            #include <stdlib.h>
+            #include <time.h>
+            int main() {
+                time_t result3 = {0};
+                time_t result1 = time(NULL);
+                time_t result2 = time(&result3);
+                printf("%d,%d,%d\n", ((int)result1) / 100000, ((int)result2) / 100000, ((int)result3) / 100000);
+                return 0;
+            }
+            """
+        )
+    }
+
+    //val root = tempVfs
+    val root = "/tmp".uniVfs
+    //val JDK_IMAGE = "jboss/base-jdk:8"
+    //val GCC_IMAGE = "gcc:8.1.0"
+    //val EMCC_IMAGE = "apiaryio/emcc"
+    //val EMCC_IMAGE = "apiaryio/emcc:1.34"
+    val JDK_IMAGE = "openjdk:8-jdk-alpine3.7"
+    val GCC_IMAGE = "frolvlad/alpine-gcc:latest"
+    val EMCC_IMAGE = "apiaryio/emcc:1.37"
+
+    init {
+        println("ROOT: " + root.absolutePath)
     }
 
     private suspend fun runCommand(vararg args: String, passthru: Boolean = false): String {
@@ -106,7 +124,7 @@ class IntegrationTest {
         val gccOutput = compileAndExecuteGCC(source, *args)
         val javaOutput = compileAndExecuteJava(source, *args)
         println(gccOutput)
-        assertEquals(gccOutput, javaOutput, "Executing $source with args ${args.toList()}")
+        assertEquals(gccOutput, javaOutput, "Executing args=${args.toList()}\n" + source.trimIndent())
     }
 
     //private fun assertExecutionEquals(expected: String, source: String) {

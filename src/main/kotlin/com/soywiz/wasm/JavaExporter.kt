@@ -154,6 +154,9 @@ class JavaExporter(val wasm: Wasm) : Exporter {
             line("void Op_i64_store8(int address, int offset, int align, long value) { Op_i32_store8(address, offset, align, (int)value); }")
             line("void Op_i64_store16(int address, int offset, int align, long value) { Op_i32_store16(address, offset, align, (int)value); }")
             line("void Op_i64_store32(int address, int offset, int align, long value) { Op_i32_store(address, offset, align, (int)value); }")
+            line("void sb(int address, int value) { Op_i32_store8(address, 0, 0, value); }")
+            line("void sh(int address, int value) { Op_i32_store16(address, 0, 1, value); }")
+            line("void sw(int address, int value) { Op_i32_store(address, 0, 2, value); }")
             line("int lw(int address) { return Op_i32_load(address, 0, 2); }")
             line("int lb(int address) { return Op_i32_load8_s(address, 0, 0); }")
             line("int lbu(int address) { return Op_i32_load8_u(address, 0, 0); }")
@@ -269,6 +272,9 @@ class JavaExporter(val wasm: Wasm) : Exporter {
             line("int Op_f32_ge(float l, float r) { return b2i(l >= r); }")
 
             line("int Op_f32_convert_u_i32(float v) { return (int)v; } // @TODO: Fixme!")
+
+            // stdlib
+            line("int _time(int addr) { int time = (int)(System.currentTimeMillis() / 1000L); if (addr != 0) sw(addr, time); return time; }")
 
             val indices = LinkedHashMap<Int, String>()
             for (data in wasm.datas) {
