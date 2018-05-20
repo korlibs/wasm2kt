@@ -118,17 +118,11 @@ class IntegrationTest {
             root["wasm-program.c"].writeString(source)
             root["wasm-program.out"].delete()
 
-            // C -> BIN
-            runCommand(
-                "docker", "run", "-v", "${root.absolutePath}:/src", GCC_IMAGE,
-                "gcc", "/src/wasm-program.c", "-o", "/src/wasm-program.out",
-                passthru = true
-            )
-
-            // Execute Native
+            // C -> BIN -> Execute Native
+            val argsStr = args.joinToString(" ") { it }
             result = runCommand(
                 "docker", "run", "-v", "${root.absolutePath}:/src", GCC_IMAGE,
-                "/src/wasm-program.out", *args
+                "/bin/sh", "-c", "gcc /src/wasm-program.c -o /src/wasm-program.out && /src/wasm-program.out $argsStr"
             )
         }
         return result
@@ -154,17 +148,11 @@ class IntegrationTest {
             val data = root["wasm-program.wasm"].readAll().openSync()
             root["Module.java"].writeString(Wasm.readAndConvert(data, "java").toString())
 
-            // Java -> Class
-            runCommand(
-                "docker", "run", "-v", "${root.absolutePath}:/src", JDK_IMAGE,
-                "javac", "/src/Module.java",
-                passthru = true
-            )
-
-            // Execute Java
+            // Java -> Class -> Execute
+            val argsStr = args.joinToString(" ") { it }
             result = runCommand(
-                "docker", "run", "-v", "/tmp:/src", JDK_IMAGE,
-                "java", "-cp", "/src", "Module", *args
+                "docker", "run", "-v", "${root.absolutePath}:/src", JDK_IMAGE,
+                "/bin/sh", "-c", "javac /src/Module.java && java -cp /src Module $argsStr}"
             )
         }
         return result
