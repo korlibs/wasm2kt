@@ -251,8 +251,12 @@ object Wast {
                     }
                 }
                 when {
-                    rparams.size == 2 -> nif(result, node(rparams[0]), node(rparams[1]))
-                    rparams.size == 3 -> nif(result, node(rparams[0]), node(rparams[1]), node(rparams[2]))
+                    result != null -> {
+                        check(rparams.size == 3)
+                        terop(node(rparams[0]), node(rparams[1]), node(rparams[2]))
+                    }
+                    rparams.size == 2 -> nif(node(rparams[0]), node(rparams[1]))
+                    rparams.size == 3 -> nif(node(rparams[0]), node(rparams[1]), node(rparams[2]))
                     else -> TODO("Unknown if with nparams=$nparams :: $block")
                 }
             }
@@ -312,7 +316,7 @@ object Wast {
 
     interface Node
     object nop : Node
-    data class nif(val result: Block?, val cond: Node, val btrue: Node, val bfalse: Node? = null) : Node
+    data class nif(val cond: Node, val btrue: Node, val bfalse: Node? = null) : Node
     data class ncall(val name: String, val args: List<Node>) : Node
     data class ncallindirect(val name: String, val args: List<Node>) : Node
     data class nloop(val name: String?, val stms: List<Node>) : Node
@@ -323,6 +327,7 @@ object Wast {
     data class literal(val op: String, val lit: String) : Node
     data class binop(val op: String, val l: Node, val r: Node) : Node
     data class unop(val op: String, val expr: Node) : Node
+    data class terop(val cond: Node, val btrue: Node, val bfalse: Node) : Node
     data class set_global(val name: String, val expr: Node) : Node
     data class set_local(val name: String, val expr: Node) : Node
     data class get_global(val name: String) : Node
