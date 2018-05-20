@@ -197,6 +197,7 @@ class JavaExporter(val wasm: Wasm) : Exporter {
             line("void __putBytes(int address, byte[] data) { for (int n = 0; n < data.length; n++) heap.put(address + n, data[n]); }")
             line("void __putBytes(int address, String data) { for (int n = 0; n < data.length(); n++) heap.put(address + n, (byte)data.charAt(n)); }")
             line("void __putBytesB64(int address, String... datas) { String out = \"\"; for (int n = 0; n < datas.length; n++) out += datas[n]; __putBytes(address, java.util.Base64.getDecoder().decode(out)); }")
+            line("void _abort() { throw new RuntimeException(\"ABORT \"); }")
             line("void _abort(int value) { throw new RuntimeException(\"ABORT \" + value); }")
             line("void abort(int value) { throw new RuntimeException(\"ABORT \" + value); }")
             line("void abortStackOverflow(int count) { throw new RuntimeException(\"abortStackOverflow(\$count)\"); }")
