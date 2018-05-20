@@ -8,6 +8,13 @@ import kotlin.test.*
 class IntegrationTest {
     //val root = tempVfs
     val root = "/tmp".uniVfs
+    //val JDK_IMAGE = "jboss/base-jdk:8"
+    //val GCC_IMAGE = "gcc:8.1.0"
+    //val EMCC_IMAGE = "apiaryio/emcc"
+    //val EMCC_IMAGE = "apiaryio/emcc:1.34"
+    val JDK_IMAGE = "openjdk:8-jdk-alpine3.7"
+    val GCC_IMAGE = "frolvlad/alpine-gcc:latest"
+    val EMCC_IMAGE = "apiaryio/emcc:1.37"
 
     init {
         println("ROOT: " + root.absolutePath)
@@ -38,7 +45,7 @@ class IntegrationTest {
         }
     }
 
-    private fun compileAndExecuteGCC(source: String): String {
+    private fun compileAndExecuteGCC(source: String, vararg args: String): String {
         var result = ""
         runBlocking {
             root["wasm-program.c"].writeString(source)
@@ -46,21 +53,21 @@ class IntegrationTest {
 
             // C -> BIN
             runCommand(
-                "docker", "run", "-v", "${root.absolutePath}:/src", "gcc:8.1.0",
+                "docker", "run", "-v", "${root.absolutePath}:/src", GCC_IMAGE,
                 "gcc", "/src/wasm-program.c", "-o", "/src/wasm-program.out",
                 passthru = true
             )
 
             // Execute Native
             result = runCommand(
-                "docker", "run", "-v", "${root.absolutePath}:/src", "gcc:8.1.0",
-                "/src/wasm-program.out"
+                "docker", "run", "-v", "${root.absolutePath}:/src", GCC_IMAGE,
+                "/src/wasm-program.out", *args
             )
         }
         return result
     }
 
-    private fun compileAndExecuteJava(source: String): String {
+    private fun compileAndExecuteJava(source: String, vararg args: String): String {
         var result = ""
         runBlocking {
             root["wasm-program.c"].writeString(source)
@@ -70,7 +77,7 @@ class IntegrationTest {
 
             // C -> WASM
             runCommand(
-                "docker", "run", "--rm", "-v", "${root.absolutePath}:/src", "-t", "apiaryio/emcc",
+                "docker", "run", "--rm", "-v", "${root.absolutePath}:/src", "-t", EMCC_IMAGE,
                 "emconfigure", "emcc", "wasm-program.c", "-o", "wasm-program", "-O3", "-s", "WASM=1",
                 passthru = true
             )
@@ -81,25 +88,25 @@ class IntegrationTest {
 
             // Java -> Class
             runCommand(
-                "docker", "run", "-v", "${root.absolutePath}:/src", "jboss/base-jdk:8",
+                "docker", "run", "-v", "${root.absolutePath}:/src", JDK_IMAGE,
                 "javac", "/src/Module.java",
                 passthru = true
             )
 
             // Execute Java
             result = runCommand(
-                "docker", "run", "-v", "/tmp:/src", "jboss/base-jdk:8",
-                "java", "-cp", "/src", "Module"
+                "docker", "run", "-v", "/tmp:/src", JDK_IMAGE,
+                "java", "-cp", "/src", "Module", *args
             )
         }
         return result
     }
 
-    private fun assertGccAndJavaExecutionAreEquals(source: String) {
-        val gccOutput = compileAndExecuteGCC(source)
-        val javaOutput = compileAndExecuteJava(source)
+    private fun assertGccAndJavaExecutionAreEquals(source: String, vararg args: String) {
+        val gccOutput = compileAndExecuteGCC(source, *args)
+        val javaOutput = compileAndExecuteJava(source, *args)
         println(gccOutput)
-        assertEquals(gccOutput, javaOutput, "Executing $source")
+        assertEquals(gccOutput, javaOutput, "Executing $source with args ${args.toList()}")
     }
 
     //private fun assertExecutionEquals(expected: String, source: String) {
