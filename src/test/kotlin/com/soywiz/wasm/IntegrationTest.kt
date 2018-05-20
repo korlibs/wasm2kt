@@ -9,9 +9,13 @@ class IntegrationTest {
     //val root = tempVfs
     val root = "/tmp".uniVfs
 
+    init {
+        println("ROOT: " + root.absolutePath)
+    }
+
     @Test
     fun testSimpleIntegrationTest() {
-        assertGccJavaExecutionEquals(
+        assertGccAndJavaExecutionAreEquals(
             """
             #include <stdio.h>
             int main() {
@@ -24,37 +28,32 @@ class IntegrationTest {
         )
     }
 
-    private suspend fun runCommand(vararg args: String): String {
+    private suspend fun runCommand(vararg args: String, passthru: Boolean = false): String {
         println(args.joinToString(" "))
-        return root.execToString(*args)
+        if (passthru){
+            root.passthru(*args)
+            return ""
+        } else {
+            return root.execToString(*args)
+        }
     }
 
     private fun compileAndExecuteGCC(source: String): String {
         var result = ""
         runBlocking {
             root["wasm-program.c"].writeString(source)
-            println(root.absolutePath)
+            root["wasm-program.out"].delete()
 
             // C -> BIN
             runCommand(
-                "docker",
-                "run",
-                "-v",
-                "${root.absolutePath}:/src",
-                "gcc:8.1.0",
-                "gcc",
-                "/src/wasm-program.c",
-                "-o",
-                "/src/wasm-program.out"
+                "docker", "run", "-v", "${root.absolutePath}:/src", "gcc:8.1.0",
+                "gcc", "/src/wasm-program.c", "-o", "/src/wasm-program.out",
+                passthru = true
             )
 
             // Execute Native
             result = runCommand(
-                "docker",
-                "run",
-                "-v",
-                "${root.absolutePath}:/src",
-                "gcc:8.1.0",
+                "docker", "run", "-v", "${root.absolutePath}:/src", "gcc:8.1.0",
                 "/src/wasm-program.out"
             )
         }
@@ -64,15 +63,16 @@ class IntegrationTest {
     private fun compileAndExecuteJava(source: String): String {
         var result = ""
         runBlocking {
-            //val root = tempVfs
-            val root = "/tmp".uniVfs
             root["wasm-program.c"].writeString(source)
-            println(root.absolutePath)
+            root["wasm-program.wasm"].delete()
+            root["Module.java"].delete()
+            root["Module.class"].delete()
 
             // C -> WASM
             runCommand(
                 "docker", "run", "--rm", "-v", "${root.absolutePath}:/src", "-t", "apiaryio/emcc",
-                "emconfigure", "emcc", "wasm-program.c", "-o", "wasm-program", "-O3", "-s", "WASM=1"
+                "emconfigure", "emcc", "wasm-program.c", "-o", "wasm-program", "-O3", "-s", "WASM=1",
+                passthru = true
             )
 
             // WASM -> Java
@@ -82,7 +82,8 @@ class IntegrationTest {
             // Java -> Class
             runCommand(
                 "docker", "run", "-v", "${root.absolutePath}:/src", "jboss/base-jdk:8",
-                "javac", "/src/Module.java"
+                "javac", "/src/Module.java",
+                passthru = true
             )
 
             // Execute Java
@@ -94,7 +95,7 @@ class IntegrationTest {
         return result
     }
 
-    private fun assertGccJavaExecutionEquals(source: String) {
+    private fun assertGccAndJavaExecutionAreEquals(source: String) {
         val gccOutput = compileAndExecuteGCC(source)
         val javaOutput = compileAndExecuteJava(source)
         println(gccOutput)

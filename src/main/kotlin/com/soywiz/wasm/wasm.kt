@@ -150,14 +150,13 @@ class Wasm {
         val memindex = readLEB128()
         val expr = readExpr()
         val data = readBytesExact(readLEB128())
-        //println("$x, $e, ${b.hex}")
         return Data(memindex, expr, data, index)
     }
 
     fun SyncStream.readDataSection() {
         datas = readVec { readData(it) }
         for ((index, data) in datas.withIndex()) {
-            println("// DATA[$index]: ${data.data.size}: ${data.x}, ${data.e}")
+            trace("// DATA[$index]: ${data.data.size}: ${data.x}, ${data.e}")
         }
     }
 
@@ -176,8 +175,6 @@ class Wasm {
         val ss = readBytesExact(size).openSync()
         val locals = ss.readVec { ss.readCodeLocals() }
         val expr = ss.readExpr()
-        //println("::: $locals -> $expr")
-        //println(expr.toAst())
         return Code(locals, expr)
     }
 
@@ -187,15 +184,19 @@ class Wasm {
             functions[offset + index]?.code = code
         }
         for ((index, func) in functions) {
-            println("// CODE[$index]: ${func.code}")
+            trace("// CODE[$index]: ${func.code}")
         }
     }
 
     fun SyncStream.readTypesSection() {
         types = readVec { readType() }
         for ((index, type) in types.withIndex()) {
-            println("// TYPE[$index]: $type")
+            trace("// TYPE[$index]: $type")
         }
+    }
+
+    private fun trace(str: String) {
+        //println(str)
     }
 
     interface WasmType {
@@ -272,7 +273,7 @@ class Wasm {
     fun SyncStream.readImportSection() {
         imports = readVec { readImport() }
         for ((index, import) in imports.withIndex()) {
-            println("// IMPORT[$index]: $import")
+            trace("// IMPORT[$index]: $import")
         }
     }
 
@@ -329,7 +330,6 @@ class Wasm {
             INDEX_GLOBALS -> globals[index] = Global(type as WasmType.Global, index, e = null, import = import)
         }
         //println("$nm::$name = $type")
-        //println("$nm::$name = $type")
         return import
     }
 
@@ -340,7 +340,7 @@ class Wasm {
     fun SyncStream.readExportSection() {
         exports = readVec { readExport() }
         for ((index, export) in exports.withIndex()) {
-            println("// EXPORT[$index]: $export")
+            trace("// EXPORT[$index]: $export")
         }
     }
 
@@ -385,7 +385,7 @@ class Wasm {
         }
         for (func in funcs) functions[func.index] = func
         for ((index, func) in functions) {
-            println("// FUNC[$index]: $func")
+            trace("// FUNC[$index]: $func")
         }
     }
 
@@ -393,7 +393,7 @@ class Wasm {
         val glbs = readVec { readGlobal() }
         for (g in glbs) globals[g.index] = g
         for ((index, global) in globals) {
-            println("// GLOBAL[$index]: $global")
+            trace("// GLOBAL[$index]: $global")
         }
     }
 
@@ -408,7 +408,7 @@ class Wasm {
         elements = readVec { readElement() }
 
         for ((index, e) in elements.withIndex()) {
-            println("// ELEMENT[$index]: $e")
+            trace("// ELEMENT[$index]: $e")
         }
     }
 
@@ -424,7 +424,7 @@ class Wasm {
     fun SyncStream.readGlobal(): Global {
         val gt = readGlobalType()
         val e = readExpr()
-        println("// GLOBAL: $gt, $e")
+        trace("// GLOBAL: $gt, $e")
         return Global(gt, indicesInTables[INDEX_GLOBALS]++, e)
     }
 

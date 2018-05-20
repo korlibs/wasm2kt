@@ -52,6 +52,15 @@ publishing {
     }
 }
 
+kotlin.experimental.coroutines "enable"
+
+test {
+    testLogging {
+        outputs.upToDateWhen {false}
+        showStandardStreams = true
+    }
+}
+
 // gradle bintrayUpload
 if (hasProperty('BINTRAY_USER') && hasProperty('BINTRAY_KEY')) {
     bintray {
@@ -70,5 +79,3 @@ if (hasProperty('BINTRAY_USER') && hasProperty('BINTRAY_KEY')) {
         }
     }
 }
-kotlin.experimental.coroutines "enable"
-
