@@ -70,3 +70,5 @@ if (hasProperty('BINTRAY_USER') && hasProperty('BINTRAY_KEY')) {
         }
     }
 }
+kotlin.experimental.coroutines "enable"
+
