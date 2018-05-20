@@ -39,6 +39,51 @@ class IntegrationTest {
         )
     }
 
+    @Test
+    fun testMalloc() {
+        assertGccAndJavaExecutionAreEquals(
+            """
+            #include <stdio.h>
+            #include <stdlib.h>
+            #include <time.h>
+
+            int main() {
+                unsigned char* data = (unsigned char *)malloc(1024);
+                int sum = 0;
+                unsigned long long int mul = 1;
+                for (int n = 0; n < 1024; n++) data[n] = (unsigned char)n;
+                for (int n = 0; n < 1024; n++) sum += data[n];
+                for (int n = 0; n < 64; n++) if (data[n] != 0) mul *= data[n];
+                printf("%d, %llu\n", sum, mul);
+                free(data);
+                return 0;
+            }
+            """
+        )
+    }
+
+    //@Test
+    //fun testDoubles() {
+    //    assertGccAndJavaExecutionAreEquals(
+    //        """
+    //        #include <stdio.h>
+    //        #include <stdlib.h>
+    //        #include <time.h>
+    //
+    //        double toDouble(const char *str) { return atof(str); }
+    //        float toFloat(const char *str) { return (float)atof(str); }
+    //        int toInt(const char *str) { return (int)atof(str); }
+    //
+    //        int main() {
+    //            printf("%d\n", toInt("123.125"));
+    //            printf("%f\n", toFloat("123.125"));
+    //            printf("%lf\n", toDouble("123.125"));
+    //            return 0;
+    //        }
+    //        """
+    //    )
+    //}
+
     //val root = tempVfs
     val root = "/tmp".uniVfs
     //val JDK_IMAGE = "jboss/base-jdk:8"
@@ -55,12 +100,16 @@ class IntegrationTest {
 
     private suspend fun runCommand(vararg args: String, passthru: Boolean = false): String {
         println(args.joinToString(" "))
-        if (passthru){
+        var startTime = System.currentTimeMillis()
+        var result = if (passthru){
             root.passthru(*args)
-            return ""
+            ""
         } else {
-            return root.execToString(*args)
+            root.execToString(*args)
         }
+        var endTime = System.currentTimeMillis()
+        println(" ---> ${endTime - startTime}")
+        return result
     }
 
     private fun compileAndExecuteGCC(source: String, vararg args: String): String {
@@ -85,7 +134,7 @@ class IntegrationTest {
         return result
     }
 
-    private fun compileAndExecuteJava(source: String, vararg args: String): String {
+    private fun compileAndExecuteJava(source: String, vararg args: String, optimization: Int = 3): String {
         var result = ""
         runBlocking {
             root["wasm-program.c"].writeString(source)
@@ -96,7 +145,8 @@ class IntegrationTest {
             // C -> WASM
             runCommand(
                 "docker", "run", "--rm", "-v", "${root.absolutePath}:/src", "-t", EMCC_IMAGE,
-                "emconfigure", "emcc", "wasm-program.c", "-o", "wasm-program", "-O3", "-s", "WASM=1",
+                "emconfigure", "emcc", "wasm-program.c", "-o", "wasm-program",
+                "-O$optimization", if (optimization == 0) "-g4" else "-g0", "-s", "WASM=1",
                 passthru = true
             )
 
@@ -120,9 +170,9 @@ class IntegrationTest {
         return result
     }
 
-    private fun assertGccAndJavaExecutionAreEquals(source: String, vararg args: String) {
+    private fun assertGccAndJavaExecutionAreEquals(source: String, vararg args: String, optimization: Int = 3) {
+        val javaOutput = compileAndExecuteJava(source, *args, optimization = optimization)
         val gccOutput = compileAndExecuteGCC(source, *args)
-        val javaOutput = compileAndExecuteJava(source, *args)
         println(gccOutput)
         assertEquals(gccOutput, javaOutput, "Executing args=${args.toList()}\n" + source.trimIndent())
     }

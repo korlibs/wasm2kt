@@ -3,6 +3,8 @@ package com.soywiz.wasm
 import com.soywiz.korio.error.*
 import com.soywiz.korio.util.*
 import java.util.*
+import kotlin.collections.LinkedHashMap
+import kotlin.collections.LinkedHashSet
 import kotlin.math.*
 
 class JavaExporter(val wasm: Wasm) : Exporter {
@@ -128,7 +130,7 @@ class JavaExporter(val wasm: Wasm) : Exporter {
             line("int checkAddress(int address, int offset) {")
             line("    int raddress = address + offset;")
             line("    if (raddress < 0 || raddress >= heap.limit() - 4) {")
-            line("        System.out.println(\"ADDRESS: \$raddress (\$address + \$offset)\");")
+            line("        System.out.printf(\"ADDRESS: %d (%d + %d)\\n\", raddress, address, offset);")
             line("    }")
             line("    return raddress;")
             line("}")
@@ -270,11 +272,15 @@ class JavaExporter(val wasm: Wasm) : Exporter {
             line("int Op_f32_le(float l, float r) { return b2i(l <= r); }")
             line("int Op_f32_gt(float l, float r) { return b2i(l > r); }")
             line("int Op_f32_ge(float l, float r) { return b2i(l >= r); }")
-
             line("int Op_f32_convert_u_i32(float v) { return (int)v; } // @TODO: Fixme!")
 
             // stdlib
             line("int _time(int addr) { int time = (int)(System.currentTimeMillis() / 1000L); if (addr != 0) sw(addr, time); return time; }")
+
+            // additional
+            line("double Op_f64_abs(double v) { return java.lang.Math.abs(v); }")
+            line("float Op_f32_convert_s_i32(int v) { return (float)v; }")
+
 
             val indices = LinkedHashMap<Int, String>()
             for (data in wasm.datas) {
@@ -283,7 +289,7 @@ class JavaExporter(val wasm: Wasm) : Exporter {
                     indices[data.index] = "${ast.expr.value}"
                 } else {
                     line("private int computeDataIndex${data.index}()") {
-                        line(ast.dump())
+                        line(ast.dump(DumpContext(null)).indenter)
                     }
                     indices[data.index] = "computeDataIndex${data.index}()"
                 }
@@ -316,7 +322,7 @@ class JavaExporter(val wasm: Wasm) : Exporter {
                                     -1,
                                     Wasm.WasmType.Function(listOf(), listOf(global.globalType.type))
                                 )
-                            ).dump()
+                            ).dump(DumpContext(null)).indenter
                         )
                     }
                     line("${global.globalType.type.type()} ${global.name} = compute${global.name}();")
@@ -415,7 +421,7 @@ class JavaExporter(val wasm: Wasm) : Exporter {
                 line("long phi_i64 = 0L;")
                 line("float phi_f32 = 0f;")
                 line("double phi_f64 = 0.0;")
-                line(bodyAst.dump())
+                line(bodyAst.dump(DumpContext(func)).indenter)
             }
         }
     }
@@ -480,66 +486,121 @@ class JavaExporter(val wasm: Wasm) : Exporter {
 
     fun AstLabel.goto() = "${this.kind.keyword} ${this.name}"
 
-    fun A.Stm.dump(out: Indenter = Indenter { }): Indenter {
+    class Breaks() {
+        val breaks = LinkedHashSet<AstLabel>()
+
+        operator fun contains(label: AstLabel) = label in breaks
+        fun addLabel(label: AstLabel) {
+            if (label.kind == FlowKind.BREAK) {
+                breaks += label
+            }
+        }
+        fun addLabelSure(label: AstLabel) {
+            breaks += label
+        }
+
+        override fun toString(): String = "Breaks($breaks)"
+    }
+
+    class DumpResult(val indenter: Indenter, val breaks: Breaks, val unreachable: Boolean)
+
+    fun Breaks.concatResult(result: DumpResult) {
+        this.breaks += result.breaks.breaks
+    }
+
+    fun DumpResult.appendBreaks(breaks: Breaks) = this.apply { breaks.concatResult(this) }
+
+    class DumpContext(val func: Wasm.WasmFunc?) {
+        val debug get() = false
+        //val debug get() = func?.name == "_memset"
+    }
+
+    fun A.Stm.dump(ctx: DumpContext, out: Indenter = Indenter { }): DumpResult {
+        val breaks = Breaks()
+        var unreachable = false
         when (this) {
             is A.Stms -> {
                 for (e in stms) {
-                    e.dump(out)
-                    if (e is A.Unreachable) break // Stop
+                    val result = e.dump(ctx, out).appendBreaks(breaks)
+                    if (result.unreachable) {
+                        unreachable = true
+                        break // Stop
+                    }
                 }
             }
             is A.AssignLocal -> out.line("${this.local.name} = ${this.expr.dump()};")
             is A.AssignGlobal -> out.line("${this.global.name} = ${this.expr.dump()};")
-            is A.RETURN -> out.line("return ${this.expr.dump()};")
-            is A.RETURN_VOID -> out.line("return;")
+            is A.RETURN -> {
+                out.line("return ${this.expr.dump()};")
+                unreachable = true
+            }
+            is A.RETURN_VOID -> {
+                out.line("return;")
+                unreachable = true
+            }
             is A.BLOCK -> {
+                lateinit var result: DumpResult
                 out.line("${label.name}: do") {
-                    this.stm.dump(out)
+                    result = this.stm.dump(ctx, out).appendBreaks(breaks)
                 }
+
                 out.line("while (false);")
+                unreachable = result.unreachable && (label !in breaks)
+                if (ctx.debug) println("BLOCK. ${ctx.func?.name} (block_label=${label.name}). Unreachable: $unreachable, $breaks")
             }
             is A.LOOP -> {
+                lateinit var result: DumpResult
                 out.line("${label.name}: while (true)") {
-                    this.stm.dump(out)
-                    if (this.stm.last() is A.Unreachable || this.stm.last() is A.BR) {
+                    result = this.stm.dump(ctx, out).appendBreaks(breaks)
+                    if (result.unreachable) {
                         out.line("//break;")
                     } else {
                         out.line("break;")
+                        breaks.addLabelSure(label)
                     }
                 }
+                unreachable = label !in breaks
+                if (ctx.debug) println("LOOP. ${ctx.func?.name} (loop_label=${label.name}). Unreachable: $unreachable, $breaks")
             }
             is A.IF -> {
                 out.line("if (${this.cond.dump()} != 0)") {
-                    this.btrue.dump(out)
+                    val result = this.btrue.dump(ctx, out).appendBreaks(breaks)
                 }
             }
             is A.IF_ELSE -> {
                 out.line("if (${this.cond.dump()} != 0)") {
-                    this.btrue.dump(out)
+                    val result = this.btrue.dump(ctx, out).appendBreaks(breaks)
                 }
                 out.line("else") {
-                    this.bfalse.dump(out)
+                    val result = this.bfalse.dump(ctx, out).appendBreaks(breaks)
                 }
             }
             is A.BR -> {
                 out.line(this.label.goto() + ";")
+                breaks.addLabel(this.label)
+                unreachable = true
             }
             is A.BR_IF -> {
                 out.line("if (${this.cond.dump()} != 0) ${this.label.goto()};")
+                breaks.addLabel(label)
             }
             is A.BR_TABLE -> {
                 out.line("switch (${this.subject.dump()})") {
                     for ((index, label) in this.labels.withIndex()) {
                         out.line("case $index: ${label.goto()};")
+                        breaks.addLabel(label)
                     }
                     out.line("default: ${this.default.goto()};")
+                    breaks.addLabel(default)
                 }
             }
             is A.STM_EXPR -> {
                 var exprStr = this.expr.dump()
-                while (exprStr.startsWith("(") && exprStr.endsWith(")")) exprStr =
-                        exprStr.substring(1, exprStr.length - 1)
-                if (this.expr is A.Const || this.expr is A.Local) {
+                while (exprStr.startsWith("(") && exprStr.endsWith(")")) {
+                    exprStr = exprStr.substring(1, exprStr.length - 1)
+                }
+
+                if (this.expr is A.Const || this.expr is A.Local || this.expr is A.Global) {
                     out.line("// $exprStr")
                 } else {
                     out.line("$exprStr;")
@@ -554,13 +615,14 @@ class JavaExporter(val wasm: Wasm) : Exporter {
             }
             is A.Unreachable -> {
                 out.line("// Unreachable")
+                unreachable = true
             }
             is A.NOP -> {
                 out.line("// nop")
             }
             else -> out.line("??? $this")
         }
-        return out
+        return DumpResult(out, breaks, unreachable)
     }
 }
 
