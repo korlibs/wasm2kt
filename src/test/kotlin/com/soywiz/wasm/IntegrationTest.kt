@@ -5,7 +5,7 @@ import com.soywiz.korio.stream.*
 import com.soywiz.korio.vfs.*
 import kotlin.test.*
 
-class IntegrationTest {
+class IntegrationTest : BaseIntegrationTest() {
     @Test
     fun testSimpleIntegrationTest() {
         assertGccAndJavaExecutionAreEquals(
@@ -76,13 +76,19 @@ class IntegrationTest {
     //
     //        int main() {
     //            printf("%d\n", toInt("123.125"));
+    //            printf("%d\n", (int)toFloat("123.125"));
     //            printf("%f\n", toFloat("123.125"));
-    //            printf("%lf\n", toDouble("123.125"));
+    //            //printf("%lf\n", toDouble("123.125"));
     //            return 0;
     //        }
-    //        """
+    //        """,
+    //        optimization = 0
     //    )
     //}
+}
+
+@Suppress("MemberVisibilityCanBePrivate")
+open class BaseIntegrationTest {
 
     //val root = tempVfs
     val root = "/tmp".uniVfs
@@ -98,21 +104,21 @@ class IntegrationTest {
         println("ROOT: " + root.absolutePath)
     }
 
-    private suspend fun runCommand(vararg args: String, passthru: Boolean = false): String {
+    protected suspend fun runCommand(vararg args: String, passthru: Boolean = false): String {
         println(args.joinToString(" "))
-        var startTime = System.currentTimeMillis()
-        var result = if (passthru){
+        val startTime = System.currentTimeMillis()
+        val result = if (passthru) {
             root.passthru(*args)
             ""
         } else {
             root.execToString(*args)
         }
-        var endTime = System.currentTimeMillis()
+        val endTime = System.currentTimeMillis()
         println(" ---> ${endTime - startTime}")
         return result
     }
 
-    private fun compileAndExecuteGCC(source: String, vararg args: String): String {
+    protected fun compileAndExecuteGCC(source: String, vararg args: String): String {
         var result = ""
         runBlocking {
             root["wasm-program.c"].writeString(source)
@@ -128,7 +134,7 @@ class IntegrationTest {
         return result
     }
 
-    private fun compileAndExecuteJava(source: String, vararg args: String, optimization: Int = 3): String {
+    protected fun compileAndExecuteJava(source: String, vararg args: String, optimization: Int = 3): String {
         var result = ""
         runBlocking {
             root["wasm-program.c"].writeString(source)
@@ -158,7 +164,7 @@ class IntegrationTest {
         return result
     }
 
-    private fun assertGccAndJavaExecutionAreEquals(source: String, vararg args: String, optimization: Int = 3) {
+    protected fun assertGccAndJavaExecutionAreEquals(source: String, vararg args: String, optimization: Int = 3) {
         val javaOutput = compileAndExecuteJava(source, *args, optimization = optimization)
         val gccOutput = compileAndExecuteGCC(source, *args)
         println(gccOutput)

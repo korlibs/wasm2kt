@@ -274,12 +274,18 @@ class JavaExporter(val wasm: Wasm) : Exporter {
             line("int Op_f32_ge(float l, float r) { return b2i(l >= r); }")
             line("int Op_f32_convert_u_i32(float v) { return (int)v; } // @TODO: Fixme!")
 
-            // stdlib
-            line("int _time(int addr) { int time = (int)(System.currentTimeMillis() / 1000L); if (addr != 0) sw(addr, time); return time; }")
 
             // additional
             line("double Op_f64_abs(double v) { return java.lang.Math.abs(v); }")
+            line("int Op_i32_trunc_s_f32(float v) { return (int)v; }")
+
             line("float Op_f32_convert_s_i32(int v) { return (float)v; }")
+
+            // stdlib
+            val importedFunctions = module.functions.values.map { it.name }.toSet()
+            if ("_time" in importedFunctions) {
+                line("int _time(int addr) { int time = (int)(System.currentTimeMillis() / 1000L); if (addr != 0) sw(addr, time); return time; }")
+            }
 
 
             val indices = LinkedHashMap<Int, String>()
@@ -601,7 +607,7 @@ class JavaExporter(val wasm: Wasm) : Exporter {
                 }
 
                 if (this.expr is A.Const || this.expr is A.Local || this.expr is A.Global) {
-                    out.line("// $exprStr")
+                    out.line("// $exprStr; // Not a statement")
                 } else {
                     out.line("$exprStr;")
                 }
