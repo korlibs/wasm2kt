@@ -736,6 +736,8 @@ class Wasm {
         Op_f32_reinterpret_i32(0xbe, 1, 1, outType = WasmType.f32),
         Op_f64_reinterpret_i64(0xbf, 1, 1, outType = WasmType.f64);
 
+        val rname = name.removePrefix("Op_").replace('_', '.')
+
         companion object {
             val OPS_BY_ID = values().associateBy { it.id }
             operator fun get(index: Int): Ops = OPS_BY_ID[index] ?: invalidOp("Invalid OP $index")
