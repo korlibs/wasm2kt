@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/soywiz/wasm2kt.svg?branch=master)](https://travis-ci.org/soywiz/wasm2kt)
+
 ### Summary
 
 This project allows to convert WASM (Web Assembly) from its binary format into Kotlin code.
