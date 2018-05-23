@@ -7,6 +7,6 @@ import org.junit.*
 class WastTest {
     @Test
     fun name() = suspendTest {
-        Wast.parseModule(resourcesVfs["wasm-program.wast"].readString())
+        WastReader.parseModule(resourcesVfs["wasm-program.wast"].readString())
     }
 }

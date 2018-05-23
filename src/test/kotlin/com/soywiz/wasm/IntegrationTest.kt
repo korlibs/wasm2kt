@@ -7,7 +7,7 @@ import kotlin.test.*
 
 class IntegrationTest : BaseIntegrationTest() {
     @Test
-    fun testSimpleIntegrationTest() {
+    fun testSimple() {
         assertGccAndJavaExecutionAreEquals(
             """
             #include <stdio.h>
@@ -146,7 +146,8 @@ open class BaseIntegrationTest {
             runCommand(
                 "docker", "run", "--rm", "-v", "${root.absolutePath}:/src", "-t", EMCC_IMAGE,
                 "emconfigure", "emcc", "wasm-program.c", "-o", "wasm-program",
-                "-O$optimization", if (optimization == 0) "-g4" else "-g0", "-s", "WASM=1",
+                "-O$optimization", "-g4", "-s", "WASM=1",
+                //"-O$optimization", if (optimization == 0) "-g4" else "-g0", "-s", "WASM=1",
                 passthru = true
             )
 

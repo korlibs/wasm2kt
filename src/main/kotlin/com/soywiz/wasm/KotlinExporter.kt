@@ -24,8 +24,8 @@ class KotlinExporter(val wasm: Wasm) : Exporter {
             }
             val indices = LinkedHashMap<Int, String>()
             for (data in wasm.datas) {
-                val ast = data.e.toAst(wasm, Wasm.WasmFunc(wasm, -1, INT_FUNC_TYPE))
-                if (ast is A.RETURN && ast.expr is A.Const) {
+                val ast = data.e.toAst(wasm, WasmFunc(-1, Wasm.INT_FUNC_TYPE))
+                if (ast is Wast.RETURN && ast.expr is Wast.Const) {
                     indices[data.index] = "${ast.expr.value}"
                 } else {
                     line("private fun computeDataIndex${data.index}(): Int") {
@@ -42,7 +42,7 @@ class KotlinExporter(val wasm: Wasm) : Exporter {
             for (global in module.globals.values) {
                 if (global.import == null) {
                     line("private fun compute${global.name}(): ${global.globalType.type.type()}") {
-                        line(global.e!!.toAst(wasm, Wasm.WasmFunc(wasm, -1, Wasm.WasmType.Function(listOf(), listOf(global.globalType.type)))).dump())
+                        line(global.e!!.toAst(wasm, WasmFunc(-1, WasmType.Function(listOf(), listOf(global.globalType.type)))).dump())
                     }
                     line("var ${global.name}: ${global.globalType.type.type()} = compute${global.name}()")
                 }
@@ -64,7 +64,7 @@ class KotlinExporter(val wasm: Wasm) : Exporter {
         }
     }
 
-    fun dump(func: Wasm.WasmFunc): Indenter = Indenter {
+    fun dump(func: WasmFunc): Indenter = Indenter {
         val code = func.code
         if (code != null) {
             val body = code.body
@@ -90,59 +90,59 @@ class KotlinExporter(val wasm: Wasm) : Exporter {
         }
     }
 
-    fun A.Expr.dump(): String {
+    fun Wast.Expr.dump(): String {
         return when (this) {
-            is A.Const -> when (this.type) {
-                Wasm.WasmType.f32 -> "(${this.value}f)"
-                Wasm.WasmType.i64 -> "(${this.value}L)"
+            is Wast.Const -> when (this.type) {
+                WasmType.f32 -> "(${this.value}f)"
+                WasmType.i64 -> "(${this.value}L)"
                 else -> "(${this.value})"
             }
-            is A.Local -> this.local.name
-            is A.Global -> global.name
-            is A.Unop -> {
+            is Wast.Local -> this.local.name
+            is Wast.Global -> global.name
+            is Wast.Unop -> {
                 //"(" + " ${this.op.symbol} " + this.expr.dump() + ")"
                 "$op(${this.expr.dump()})"
             }
-            is A.Binop -> {
+            is Wast.Binop -> {
                 val ld = l.dump()
                 val rd = r.dump()
                 //when (op){
-                //    //Wasm.Ops.Op_i32_add -> "($ld + $rd)"
+                //    //Ops.Op_i32_add -> "($ld + $rd)"
                 //    else -> "$op($ld, $rd)"
                 //}
                 "$op($ld, $rd)"
             }
-            is A.CALL -> {
+            is Wast.CALL -> {
                 val name = if (this.func.name.startsWith("___syscall")) "___syscall" else this.func.name
                 "$name(${this.args.map { it.dump() }.joinToString(", ")})"
             }
             //is A.CALL_INDIRECT -> "((Op_getFunction(${this.address.dump()}) as (${this.type.type()}))" + "(" + this.args.map { it.dump() }.joinToString(
-            is A.CALL_INDIRECT -> "(functions${this.type.signature}(${this.address.dump()})(" + this.args.map { it.dump() }.joinToString(
+            is Wast.CALL_INDIRECT -> "(functions${this.type.signature}(${this.address.dump()})(" + this.args.map { it.dump() }.joinToString(
                 ", "
             ) + "))"
-            is A.ReadMemory -> {
+            is Wast.ReadMemory -> {
                 //this.access()
                 "${this.op}(${this.address.dump()}, ${this.offset}, ${this.align})"
             }
-            is A.Phi -> "phi_${this.type}"
+            is Wast.Phi -> "phi_${this.type}"
             else -> "???($this)"
         }
     }
 
-    fun Wasm.WasmType.default(): String = when (this) {
-        Wasm.WasmType.i64 -> "0L"
-        Wasm.WasmType.f32 -> "0f"
-        Wasm.WasmType.f64 -> "0.0"
+    fun WasmType.default(): String = when (this) {
+        WasmType.i64 -> "0L"
+        WasmType.f32 -> "0f"
+        WasmType.f64 -> "0.0"
         else -> "0"
     }
 
-    fun Wasm.WasmType.type(): String = when (this) {
-        Wasm.WasmType.void -> "Unit"
-        Wasm.WasmType.i32 -> "Int"
-        Wasm.WasmType.i64 -> "Long"
-        Wasm.WasmType.f32 -> "Float"
-        Wasm.WasmType.f64 -> "Double"
-        is Wasm.WasmType.Function -> {
+    fun WasmType.type(): String = when (this) {
+        WasmType.void -> "Unit"
+        WasmType.i32 -> "Int"
+        WasmType.i64 -> "Long"
+        WasmType.f32 -> "Float"
+        WasmType.f64 -> "Double"
+        is WasmType.Function -> {
             "(${this.args.joinToString(", ") { it.type() }}) -> ${this.retType.type()}"
         }
         else -> "$this"
@@ -150,33 +150,35 @@ class KotlinExporter(val wasm: Wasm) : Exporter {
 
     fun AstLabel.goto() = "${this.kind.keyword}@${this.name}"
 
-    fun A.Stm.dump(out: Indenter = Indenter { }): Indenter {
+    fun Wast.Stm.dump(out: Indenter = Indenter { }): Indenter {
         when (this) {
-            is A.Stms -> {
+            is Wast.Stms -> {
                 for (e in stms) e.dump(out)
             }
-            is A.AssignLocal -> out.line("${this.local.name} = ${this.expr.dump()}")
-            is A.AssignGlobal -> out.line("${this.global.name} = ${this.expr.dump()}")
-            is A.RETURN -> out.line("return ${this.expr.dump()}")
-            is A.RETURN_VOID -> out.line("return")
-            is A.BLOCK -> {
-                out.line("${label.name}@do") {
+            is Wast.SetLocal -> out.line("${this.local.name} = ${this.expr.dump()}")
+            is Wast.SetGlobal -> out.line("${this.global.name} = ${this.expr.dump()}")
+            is Wast.RETURN -> out.line("return ${this.expr.dump()}")
+            is Wast.RETURN_VOID -> out.line("return")
+            is Wast.BLOCK -> {
+                val optLabel = if (label != null) "${label.name}@" else ""
+                out.line("${optLabel}do") {
                     this.stm.dump(out)
                 }
                 out.line("while (false)")
             }
-            is A.LOOP -> {
-                out.line("${label.name}@while (true)") {
+            is Wast.LOOP -> {
+                val optLabel = if (label != null) "${label.name}@" else ""
+                out.line("${optLabel}while (true)") {
                     this.stm.dump(out)
                     out.line("break")
                 }
             }
-            is A.IF -> {
+            is Wast.IF -> {
                 out.line("if (${this.cond.dump()} != 0)") {
                     this.btrue.dump(out)
                 }
             }
-            is A.IF_ELSE -> {
+            is Wast.IF_ELSE -> {
                 out.line("if (${this.cond.dump()} != 0)") {
                     this.btrue.dump(out)
                 }
@@ -184,13 +186,13 @@ class KotlinExporter(val wasm: Wasm) : Exporter {
                     this.bfalse.dump(out)
                 }
             }
-            is A.BR -> {
+            is Wast.BR -> {
                 out.line(this.label.goto())
             }
-            is A.BR_IF -> {
+            is Wast.BR_IF -> {
                 out.line("if (${this.cond.dump()} != 0) ${this.label.goto()}")
             }
-            is A.BR_TABLE -> {
+            is Wast.BR_TABLE -> {
                 out.line("when (${this.subject.dump()})") {
                     for ((index, label) in this.labels.withIndex()) {
                         out.line("$index -> ${label.goto()}")
@@ -198,20 +200,20 @@ class KotlinExporter(val wasm: Wasm) : Exporter {
                     out.line("else -> ${this.default.goto()}")
                 }
             }
-            is A.STM_EXPR -> {
+            is Wast.STM_EXPR -> {
                 out.line(this.expr.dump())
             }
-            is A.WriteMemory -> {
+            is Wast.WriteMemory -> {
                 //out.line("${this.access()} = ${this.value.dump()}")
                 out.line("${this.op}(${this.address.dump()}, ${this.offset}, ${this.align}, ${this.value.dump()})")
             }
-            is A.SetPhi -> {
+            is Wast.SetPhi -> {
                 out.line("phi_${this.blockType} = ${this.value.dump()}")
             }
-            is A.Unreachable -> {
+            is Wast.Unreachable -> {
                 out.line("// Unreachable")
             }
-            is A.NOP -> {
+            is Wast.NOP -> {
                 out.line("// nop")
             }
             else -> out.line("??? $this")
