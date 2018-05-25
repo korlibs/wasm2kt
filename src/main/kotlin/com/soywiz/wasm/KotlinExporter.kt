@@ -194,7 +194,7 @@ class KotlinExporter(val wasm: Wasm) : Exporter {
             }
             is Wast.BR_TABLE -> {
                 out.line("when (${this.subject.dump()})") {
-                    for ((index, label) in this.labels.withIndex()) {
+                    for ((index, label) in this.labels) {
                         out.line("$index -> ${label.goto()}")
                     }
                     out.line("else -> ${this.default.goto()}")

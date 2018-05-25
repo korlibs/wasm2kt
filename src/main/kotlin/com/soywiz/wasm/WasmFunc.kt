@@ -18,10 +18,12 @@ data class WasmFunc(
     val type: WasmType.Function,
     var code: Wasm.Code? = null,
     var import: Wasm.Import? = null,
-    var export: Wasm.Export? = null
+    var export: Wasm.Export? = null,
+    var code2: Wasm.Code2? = null,
+    val name2: String? = null
 ) : WasmFuncRef {
     override val func = this
     val rlocals by lazy { type.args + (code?.flatLocals ?: listOf()) }
 
-    override val name: String by lazy { import?.name ?: export?.name ?: "f$index" }
+    override val name: String by lazy { name2 ?: import?.name ?: export?.name ?: "f$index" }
 }

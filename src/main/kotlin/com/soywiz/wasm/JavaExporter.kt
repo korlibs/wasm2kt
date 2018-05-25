@@ -7,7 +7,7 @@ import kotlin.collections.LinkedHashMap
 import kotlin.collections.LinkedHashSet
 import kotlin.math.*
 
-class JavaExporter(val wasm: Wasm) : Exporter {
+class JavaExporter(val wasm: Wasm) : BaseJavaExporter() {
     val module = wasm
     override fun dump(): Indenter = Indenter {
         line("public class Module") {
@@ -432,65 +432,13 @@ class JavaExporter(val wasm: Wasm) : Exporter {
         }
     }
 
-    fun Wast.Expr.dump(): String {
-        return when (this) {
-            is Wast.Const -> when (this.type) {
-                WasmType.f32 -> "(${this.value}f)"
-                WasmType.i64 -> "(${this.value}L)"
-                else -> "(${this.value})"
-            }
-            is Wast.Local -> this.local.name
-            is Wast.Global -> global.name
-            is Wast.Unop -> {
-                //"(" + " ${this.op.symbol} " + this.expr.dump() + ")"
-                "$op(${this.expr.dump()})"
-            }
-            is Wast.Binop -> {
-                val ld = l.dump()
-                val rd = r.dump()
-                when (op) {
-                //Ops.Op_i32_add -> "($ld + $rd)"
-                //Ops.Op_i32_sub -> "($ld - $rd)"
-                    else -> "$op($ld, $rd)"
-                }
-            }
-            is Wast.CALL -> {
-                val name = if (this.func.name.startsWith("___syscall")) "___syscall" else this.func.name
-                "$name(${this.args.map { it.dump() }.joinToString(", ")})"
-            }
-        //is A.CALL_INDIRECT -> "((Op_getFunction(${this.address.dump()}) as (${this.type.type()}))" + "(" + this.args.map { it.dump() }.joinToString(
-            is Wast.CALL_INDIRECT -> "(invoke_${this.type.signature}(${this.address.dump()}, " + this.args.map { it.dump() }.joinToString(
-                ", "
-            ) + "))"
-            is Wast.ReadMemory -> {
-                //this.access()
-                "${this.op}(${this.address.dump()}, ${this.offset}, ${this.align})"
-            }
-            is Wast.Phi -> "phi_${this.type}"
-            else -> "???($this)"
-        }
-    }
 
-    fun WasmType.default(): String = when (this) {
-        WasmType.i64 -> "0L"
-        WasmType.f32 -> "0f"
-        WasmType.f64 -> "0.0"
-        else -> "0"
-    }
+}
 
-    fun WasmType.type(): String = when (this) {
-        WasmType.void -> "void"
-        WasmType.i32 -> "int"
-        WasmType.i64 -> "long"
-        WasmType.f32 -> "float"
-        WasmType.f64 -> "double"
-        is WasmType.Function -> {
-            "(${this.args.joinToString(", ") { it.type() }}) -> ${this.retType.type()}"
-        }
-        else -> "$this"
+open class BaseJavaExporter : Exporter {
+    override fun dump(): Indenter {
+        TODO()
     }
-
-    fun AstLabel.goto() = "${this.kind.keyword} ${this.name}"
 
     class Breaks() {
         val breaks = LinkedHashSet<AstLabel>()
@@ -521,6 +469,11 @@ class JavaExporter(val wasm: Wasm) : Exporter {
         //val debug get() = func?.name == "_memset"
     }
 
+    fun dump(ctx: DumpContext, stm: Wast.Stm, out: Indenter = Indenter { }): DumpResult {
+        return stm.dump(ctx, out)
+    }
+
+    // @TODO: We should clean-up the AST before in other phase instead of directly while generating code.
     fun Wast.Stm.dump(ctx: DumpContext, out: Indenter = Indenter { }): DumpResult {
         val breaks = Breaks()
         var unreachable = false
@@ -594,7 +547,7 @@ class JavaExporter(val wasm: Wasm) : Exporter {
             }
             is Wast.BR_TABLE -> {
                 out.line("switch (${this.subject.dump()})") {
-                    for ((index, label) in this.labels.withIndex()) {
+                    for ((index, label) in this.labels) {
                         out.line("case $index: ${label.goto()};")
                         breaks.addLabel(label)
                     }
@@ -632,6 +585,67 @@ class JavaExporter(val wasm: Wasm) : Exporter {
         }
         return DumpResult(out, breaks, unreachable)
     }
+
+
+    fun Wast.Expr.dump(): String {
+        return when (this) {
+            is Wast.Const -> when (this.type) {
+                WasmType.f32 -> "(${this.value}f)"
+                WasmType.i64 -> "(${this.value}L)"
+                else -> "(${this.value})"
+            }
+            is Wast.Local -> this.local.name
+            is Wast.Global -> global.name
+            is Wast.Unop -> {
+                //"(" + " ${this.op.symbol} " + this.expr.dump() + ")"
+                "$op(${this.expr.dump()})"
+            }
+            is Wast.Binop -> {
+                val ld = l.dump()
+                val rd = r.dump()
+                when (op) {
+                //Ops.Op_i32_add -> "($ld + $rd)"
+                //Ops.Op_i32_sub -> "($ld - $rd)"
+                    else -> "$op($ld, $rd)"
+                }
+            }
+            is Wast.CALL -> {
+                val name = if (this.func.name.startsWith("___syscall")) "___syscall" else this.func.name
+                "$name(${this.args.map { it.dump() }.joinToString(", ")})"
+            }
+        //is A.CALL_INDIRECT -> "((Op_getFunction(${this.address.dump()}) as (${this.type.type()}))" + "(" + this.args.map { it.dump() }.joinToString(
+            is Wast.CALL_INDIRECT -> "(invoke_${this.type.signature}(${this.address.dump()}, " + this.args.map { it.dump() }.joinToString(
+                ", "
+            ) + "))"
+            is Wast.ReadMemory -> {
+                //this.access()
+                "${this.op}(${this.address.dump()}, ${this.offset}, ${this.align})"
+            }
+            is Wast.Phi -> "phi_${this.type}"
+            else -> "???($this)"
+        }
+    }
+
+    fun WasmType.default(): String = when (this) {
+        WasmType.i64 -> "0L"
+        WasmType.f32 -> "0f"
+        WasmType.f64 -> "0.0"
+        else -> "0"
+    }
+
+    fun WasmType.type(): String = when (this) {
+        WasmType.void -> "void"
+        WasmType.i32 -> "int"
+        WasmType.i64 -> "long"
+        WasmType.f32 -> "float"
+        WasmType.f64 -> "double"
+        is WasmType.Function -> {
+            "(${this.args.joinToString(", ") { it.type() }}) -> ${this.retType.type()}"
+        }
+        else -> "$this"
+    }
+
+    fun AstLabel.goto() = "${this.kind.keyword} ${this.name}"
 }
 
 fun ByteArray.chunks(chunkSize: Int): List<ByteArray> {

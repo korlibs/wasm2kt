@@ -7,6 +7,10 @@ import org.junit.*
 class WastTest {
     @Test
     fun name() = suspendTest {
-        WastReader.parseModule(resourcesVfs["wasm-program.wast"].readString())
+        val wasm = WastReader.parseModule(resourcesVfs["wasm-program.wast"].readString())
+        for (func in wasm.functions) {
+            val dump = BaseJavaExporter().dump(BaseJavaExporter.DumpContext(func), func.code2!!.body)
+            println(func.name + " : " + dump.indenter)
+        }
     }
 }

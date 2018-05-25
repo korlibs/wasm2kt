@@ -108,7 +108,7 @@ interface Wast {
 
     data class BR(val label: AstLabel) : Stm
     data class BR_IF(val label: AstLabel, val cond: Expr) : Stm
-    data class BR_TABLE(val labels: List<AstLabel>, val default: AstLabel, val subject: Expr) : Stm
+    data class BR_TABLE(val labels: List<IndexedValue<AstLabel>>, val default: AstLabel, val subject: Expr) : Stm
     data class InvalidStm(val reason: String) : Stm
     class Unreachable() : Stm
     class NOP() : Stm

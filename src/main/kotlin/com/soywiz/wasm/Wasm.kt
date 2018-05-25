@@ -10,6 +10,10 @@ import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.set
 
+class WasmModule(
+    val functions: List<WasmFunc>
+)
+
 class Wasm {
     companion object {
         val INT_FUNC_TYPE = WasmType.Function(listOf(), listOf(WasmType.i32))
@@ -160,6 +164,9 @@ class Wasm {
 
     class Code(val locals: List<List<WasmType>>, val body: Expr) {
         val flatLocals get() = locals.flatMap { it }
+    }
+
+    class Code2(val locals: List<AstLocal>, val body: Wast.Stm) {
     }
 
     fun SyncStream.readCode(): Code {

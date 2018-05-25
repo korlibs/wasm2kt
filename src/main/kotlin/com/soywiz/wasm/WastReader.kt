@@ -4,17 +4,24 @@ import com.soywiz.kds.*
 import com.soywiz.korio.error.*
 import com.soywiz.korio.util.*
 
+/**
+ * This WAST file format is useful for two things:
+ * - Instead of a stack-based approach, it uses an AST in SSA form
+ * - When added debug information, this includes original private function names and local variable names
+ * - Much more useful for generating debuggable code than binary wasm that is unable to produce that information
+ */
 object WastReader {
-    fun parseModule(wast: String) {
+    fun parseModule(wast: String): WasmModule {
         val tokens = StrReader(wast).wastTokenize()
         val block = ListReader(tokens).parseLevel()
-        block.parseModule()
+        return block.parseModule()
         //println(levels)
     }
 
-    fun Block.parseModule() {
+    fun Block.parseModule(): WasmModule {
         check(this.name == "module")
         val functionTypes = arrayListOf<FunctionType>()
+        val functions = arrayListOf<WasmFunc>()
         val globals = arrayListOf<AstGlobalWithInit>()
         for (param in this.params.filterIsInstance<Block>()) {
             when (param.name) {
@@ -24,14 +31,17 @@ object WastReader {
                 "elem" -> param.parseElem()
                 "data" -> param.parseData()
                 "export" -> param.parseExport()
-                "func" -> param.parseFunc(
-                    globals = globals.map { it.global.name to it.global }.toMap(),
-                    functionTypes = functionTypes.map { it.name to it.type }.toMap()
-                )
+                "func" -> {
+                    functions += param.parseFunc(
+                        globals = globals.map { it.global.name to it.global }.toMap(),
+                        functionTypes = functionTypes.map { it.name to it.type }.toMap()
+                    )
+                }
                 else -> TODO("BLOCK '${param.name}'")
             }
         }
         println(functionTypes)
+        return WasmModule(functions)
     }
 
     fun Block.parseParam(): List<String> {
@@ -96,31 +106,34 @@ object WastReader {
         check(this.name == "export")
     }
 
-    fun Block.parseFunc(globals: Map<String, AstGlobal>, functionTypes: Map<String, WasmType.Function>) {
+    fun Block.parseFunc(globals: Map<String, AstGlobal>, functionTypes: Map<String, WasmType.Function>): WasmFunc {
         check(this.name == "func")
         val funcName = string(0)
-        val params = arrayListOf<Pair<String, String>>()
+        val params = arrayListOf<Pair<String, WasmType>>()
+        val results = arrayListOf<WasmType>()
         val locals = LinkedHashMap<String, AstLocal>()
         var result = ""
-        val body = arrayListOf<Any?>()
+        val body = arrayListOf<Wast.Stm>()
         println("funcName: $funcName")
         for (n in 1 until nparams) {
             val block = block(n)
             when (block.name) {
                 "param" , "local"-> {
                     val paramName = block.string(0)
-                    val paramType = block.string(1)
+                    val paramTypeStr = block.string(1)
+                    val paramType = WasmType(paramTypeStr)
                     if (block.name == "param") {
                         params += paramName to paramType
                     }
-                    locals += paramName to AstLocal(paramName, WasmType(paramType))
+                    locals += paramName to AstLocal(paramName, paramType)
                 }
                 "result" -> {
-                    val resultType = block.string(0)
-                    result = resultType
+                    val resultTypeStr = block.string(0)
+                    val resultType = WasmType(resultTypeStr)
+                    results += resultType
                 }
                 else -> {
-                    body += node(block, BlockBuilderContext(labels = mapOf(), locals = locals, globals = globals, functionTypes = functionTypes))
+                    body += stm(block, BlockBuilderContext(labels = mapOf(), locals = locals, globals = globals, functionTypes = functionTypes))
                 }
             }
             //println(block)
@@ -128,6 +141,12 @@ object WastReader {
         println(" --> params=$params, result=$result")
         //println(" --> locals=$locals")
         //println(" --> $body")
+        return WasmFunc(
+            index = -1,
+            name2 = funcName,
+            type = WasmType.Function(params.map { it.second }, results),
+            code2 = Wasm.Code2(locals.map { it.value }, Wast.Stms(body))
+        )
     }
 
     fun expr(block: Block, ctx: BlockBuilderContext): Wast.Expr = node(block, ctx) as Wast.Expr
@@ -260,7 +279,9 @@ object WastReader {
                                 cond = param
                             }
                         }
-                        Wast.BR_TABLE(labels.dropLast(1), labels.last(), expr(cond, ctx))
+                        val defaultLabel = labels.last()
+                        val cases = labels.dropLast(1).withIndex().toList().filter { it.value != defaultLabel }
+                        Wast.BR_TABLE(cases, defaultLabel, expr(cond, ctx))
                     }
                     WasmOp.Op_block, WasmOp.Op_loop -> {
                         val blockName = if (params.getOrNull(0) is String) {

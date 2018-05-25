@@ -289,7 +289,7 @@ fun Wasm.Expr.toAst2(
                 addStm(Wast.BR_IF(ctx.getLabel(i.l), stackPop()))
             }
             is WasmInstruction.br_table -> {
-                addStm(Wast.BR_TABLE(i.labels.map { ctx.getLabel(it) }, ctx.getLabel(i.default), stackPop()))
+                addStm(Wast.BR_TABLE(i.labels.map { ctx.getLabel(it) }.withIndex().toList(), ctx.getLabel(i.default), stackPop()))
             }
             is WasmInstruction.unreachable -> {
                 addStm(Wast.Unreachable())
