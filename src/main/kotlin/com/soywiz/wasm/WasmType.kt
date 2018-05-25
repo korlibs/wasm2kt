@@ -39,11 +39,11 @@ interface WasmType {
         override val signature: String = "l$min$max"
     }
 
-    data class Function(val args: List<WasmType>, val ret: List<WasmType>) : WasmType {
+    data class Function(val args: List<AstLocal>, val ret: List<WasmType>) : WasmType {
         override val id = -1
         val retType get() = ret.firstOrNull() ?: WasmType.void
         val retTypeVoid get() = retType == WasmType.void
-        val argsPlusRet get() = args + listOf(retType)
+        val argsPlusRet get() = args.map { it.type } + listOf(retType)
         override val signature: String get() = argsPlusRet.joinToString("") { it.signature }
     }
 

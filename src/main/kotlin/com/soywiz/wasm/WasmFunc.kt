@@ -33,7 +33,7 @@ data class WasmFunc(
     }
 
     override val func = this
-    val rlocals by lazy { type.args + (code?.flatLocals ?: listOf()) }
+    val rlocals: List<AstLocal> by lazy { type.args + (code?.flatLocals ?: listOf()) }
 
     override val name: String by lazy { name2 ?: import?.name ?: export?.name ?: "f$index" }
 }

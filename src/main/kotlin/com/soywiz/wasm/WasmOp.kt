@@ -38,7 +38,7 @@ enum class WasmOp(
     Op_call_indirect(0x11, "call_indirect", -1, kind = Kind.CALL),
 
     // Parametric operators
-    Op_drop(0x1a, "drop", 1, 0, kind = Kind.UNOP),
+    Op_drop(0x1a, "drop", 1, 0, kind = Kind.DROP),
     Op_select(0x1b, "select", 3, 1, kind = Kind.TEROP),
 
     // Variable access
@@ -248,6 +248,7 @@ enum class WasmOp(
         TEROP,
         BINOP,
         UNOP,
+        DROP,
         MEMORY_LOAD,
         MEMORY_STORE,
         MEMORY_OP,

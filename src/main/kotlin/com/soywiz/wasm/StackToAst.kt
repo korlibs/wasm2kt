@@ -141,7 +141,8 @@ fun Wasm.Expr.toAst2(
 
     fun getLocal(index: Int): AstLocal {
         val locals = ctx.func.rlocals
-        return AstLocal(index, locals.getOrNull(index) ?: WasmType.i32) // @TODO: Type
+        val type = locals.getOrNull(index)?.type ?: WasmType.i32
+        return AstLocal(index, type) // @TODO: Type
     }
 
     fun getGlobal(index: Int): AstGlobal {

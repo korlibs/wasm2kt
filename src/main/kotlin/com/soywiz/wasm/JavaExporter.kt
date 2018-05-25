@@ -381,8 +381,9 @@ class JavaExporter(val wasm: WasmModule) : BaseJavaExporter() {
                 //val funcs = functions.joinToString(", ") { "this::${it.name}" }
                 //line("val functions${type.signature} = arrayOf($funcs)")
                 //val funcType = type.typeName()
-                val args = type.args.withIndex().map { "${it.value.type()} v${it.index}" }.joinToString(", ")
-                val argsCall = type.args.withIndex().map { "v${it.index}" }.joinToString(", ")
+                val ctx = DumpContext(moduleCtx, WasmFunc(-1, WasmType.Function(listOf(), listOf())))
+                val args = type.args.map { "${it.type.type()} ${ctx.getName(it)}" }.joinToString(", ")
+                val argsCall = type.args.withIndex().map { ctx.getName(it.value) }.joinToString(", ")
                 val rfuncs = functions.map { it to funcToIdx[it] }.filter { it.second != null }
                 val argsWithIndex = if (args.isEmpty()) "int index" else "int index, $args"
                 line("${type.retType.type()} invoke_${type.signature}($argsWithIndex)") {
@@ -412,22 +413,23 @@ class JavaExporter(val wasm: WasmModule) : BaseJavaExporter() {
         val bodyAst = func.getAst(wasm)
         if (bodyAst != null) {
             val visibility = if (func.export != null) "public " else "private "
-            val args = func.type.args.withIndex().joinToString(", ") { "${it.value.type()} p" + it.index + "" }
+            val ctx = DumpContext(moduleCtx, func)
+            val args = func.type.args.joinToString(", ") { "${it.type.type()} " + ctx.getName(it) + "" }
             line("$visibility${func.type.retType.type()} ${func.name}($args)") {
-                for ((index, local) in func.rlocals.withIndex()) {
-                    val value = if (index < func.type.args.size) "p$index" else local.default()
-                    line("${local.type()} l$index = $value;")
-                }
+                //for ((index, local) in func.rlocals.withIndex()) {
+                //    val value = if (index < func.type.args.size) "p$index" else local.default()
+                //    line("${local.type()} l$index = $value;")
+                //}
+                val argsSet = func.type.args.toSet()
                 for (local in bodyAst.getLocals()) {
-                    if (local.index >= MIN_TEMP_VARIABLE) {
-                        line("${local.type.type()} ${local.name} = ${local.type.default()};")
-                    }
+                    if (local in argsSet) continue
+                    //if (local.index >= MIN_TEMP_VARIABLE) {
+                        line("${local.type.type()} ${ctx.getName(local)} = ${local.type.default()};")
+                    //}
                 }
-                line("int phi_i32 = 0;")
-                line("long phi_i64 = 0L;")
-                line("float phi_f32 = 0f;")
-                line("double phi_f64 = 0.0;")
-                line(bodyAst.dump(DumpContext(moduleCtx, func)).indenter)
+                val res = bodyAst.dump(ctx)
+                for (phi in ctx.phiTypes) line("${phi.type()} phi_$phi = ${phi.default()};")
+                line(res.indenter)
             }
         }
     }
@@ -437,7 +439,10 @@ class JavaExporter(val wasm: WasmModule) : BaseJavaExporter() {
 
 open class BaseJavaExporter : Exporter {
     companion object {
-        val JAVA_KEYWORDS = setOf("do", "while", "if", "else", "void", "int") // ...
+        val JAVA_KEYWORDS = setOf("do", "while", "if", "else", "void", "int", "this") // ...
+        val PHI_NAMES = setOf("phi_i32", "phi_i64", "phi_f32", "phi_f64")
+        val RESERVED_LOCALS = setOf("index")
+        val JAVA_DEFINED_NAMES: Set<String> = JAVA_KEYWORDS + PHI_NAMES + RESERVED_LOCALS
     }
     override fun dump(): Indenter {
         TODO()
@@ -483,7 +488,7 @@ open class BaseJavaExporter : Exporter {
     class ModuleDumpContext() {
         val usedNames = NameAllocator {
             var res = it.replace('$', '_').replace('-', '_')
-            while (res in JAVA_KEYWORDS) res = "_$res"
+            while (res in JAVA_DEFINED_NAMES) res = "_$res"
             res
         }
         val globalNames = LinkedHashMap<AstGlobal, String>()
@@ -494,11 +499,13 @@ open class BaseJavaExporter : Exporter {
     }
 
     class DumpContext(val moduleCtx: ModuleDumpContext, val func: WasmFunc?) {
+        val phiTypes = LinkedHashSet<WasmType>()
         val debug get() = false
         //val debug get() = func?.name == "_memset"
         val usedNames = NameAllocator {
-            var res = it.replace('$', '_').replace('-', '_')
-            while (res in JAVA_KEYWORDS) res = "_$res"
+            //var res = it.replace('$', '_').replace('-', '_')
+            var res = it.replace('-', '_')
+            while (res in JAVA_DEFINED_NAMES) res = "_$res"
             res
         }
         val localNames = LinkedHashMap<AstLocal, String>()
@@ -665,7 +672,10 @@ open class BaseJavaExporter : Exporter {
                 //this.access()
                 "${this.op}(${this.address.dump(ctx)}, ${this.offset}, ${this.align})"
             }
-            is Wast.Phi -> "phi_${this.type}"
+            is Wast.Phi -> {
+                ctx.phiTypes += this.type
+                "phi_${this.type}"
+            }
             else -> "???($this)"
         }
     }
@@ -684,7 +694,7 @@ open class BaseJavaExporter : Exporter {
         WasmType.f32 -> "float"
         WasmType.f64 -> "double"
         is WasmType.Function -> {
-            "(${this.args.joinToString(", ") { it.type() }}) -> ${this.retType.type()}"
+            "(${this.args.joinToString(", ") { it.type.type() }}) -> ${this.retType.type()}"
         }
         else -> "$this"
     }

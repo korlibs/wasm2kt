@@ -73,11 +73,11 @@ class KotlinExporter(val wasm: WasmModule) : Exporter {
             val body = code.body
             val bodyAst = body.toAst(wasm, func)
             val visibility = if (func.export != null) "" else "private "
-            val args = func.type.args.withIndex().joinToString(", ") { "p" + it.index + ": ${it.value.type()}" }
+            val args = func.type.args.withIndex().joinToString(", ") { "p" + it.index + ": ${it.value.type.type()}" }
             line("${visibility}fun ${func.name}($args): ${func.type.retType.type()}") {
                 for ((index, local) in func.rlocals.withIndex()) {
-                    val value = if (index < func.type.args.size) "p$index" else local.default()
-                    line("var l$index: ${local.type()} = $value")
+                    val value = if (index < func.type.args.size) "p$index" else local.type.default()
+                    line("var ${local.name}: ${local.type.type()} = $value")
                 }
                 for (local in bodyAst.getLocals()) {
                     if (local.index >= MIN_TEMP_VARIABLE) {
@@ -146,7 +146,7 @@ class KotlinExporter(val wasm: WasmModule) : Exporter {
         WasmType.f32 -> "Float"
         WasmType.f64 -> "Double"
         is WasmType.Function -> {
-            "(${this.args.joinToString(", ") { it.type() }}) -> ${this.retType.type()}"
+            "(${this.args.joinToString(", ") { it.type.type() }}) -> ${this.retType.type()}"
         }
         else -> "$this"
     }

@@ -40,7 +40,6 @@ object WastReader {
                 else -> TODO("BLOCK '${param.name}'")
             }
         }
-        println(functionTypes)
         return WasmModule(
             functions = functions,
             datas = listOf(),
@@ -71,7 +70,7 @@ object WastReader {
                     else -> TODO()
                 }
             }
-            return WasmType.Function(params.map { WasmType(it) }, result.map { WasmType(it) })
+            return WasmType.Function(params.withIndex().map { AstLocal(it.index, WasmType(it.value)) }, result.map { WasmType(it) })
         }
 
         val type = block(1).parseFuncTypeType()
@@ -115,12 +114,13 @@ object WastReader {
     fun Block.parseFunc(globals: Map<String, AstGlobal>, functionTypes: Map<String, WasmType.Function>): WasmFunc {
         check(this.name == "func")
         val funcName = string(0)
-        val params = arrayListOf<Pair<String, WasmType>>()
+        val params = arrayListOf<Pair<String, AstLocal>>()
         val results = arrayListOf<WasmType>()
         val locals = LinkedHashMap<String, AstLocal>()
+        val localsAndParams = LinkedHashMap<String, AstLocal>()
         var result = ""
         val body = arrayListOf<Wast.Stm>()
-        println("funcName: $funcName")
+        //println("funcName: $funcName")
         for (n in 1 until nparams) {
             val block = block(n)
             when (block.name) {
@@ -128,10 +128,13 @@ object WastReader {
                     val paramName = block.string(0)
                     val paramTypeStr = block.string(1)
                     val paramType = WasmType(paramTypeStr)
+                    val pair = paramName to AstLocal(paramName, paramType)
                     if (block.name == "param") {
-                        params += paramName to paramType
+                        params += pair
+                    } else {
+                        locals += pair
                     }
-                    locals += paramName to AstLocal(paramName, paramType)
+                    localsAndParams += pair
                 }
                 "result" -> {
                     val resultTypeStr = block.string(0)
@@ -139,12 +142,12 @@ object WastReader {
                     results += resultType
                 }
                 else -> {
-                    body += stm(block, BlockBuilderContext(labels = mapOf(), locals = locals, globals = globals, functionTypes = functionTypes))
+                    body += stm(block, BlockBuilderContext(labels = mapOf(), locals = localsAndParams, globals = globals, functionTypes = functionTypes))
                 }
             }
             //println(block)
         }
-        println(" --> params=$params, result=$result")
+        //println(" --> params=$params, result=$result")
         //println(" --> locals=$locals")
         //println(" --> $body")
         return WasmFunc(
@@ -206,6 +209,10 @@ object WastReader {
             WasmOp.Kind.UNOP -> {
                 check(nparams == 1)
                 Wast.Unop(op, expr(0, ctx))
+            }
+            WasmOp.Kind.DROP -> {
+                check(nparams == 1)
+                Wast.STM_EXPR(expr(0, ctx))
             }
             WasmOp.Kind.MEMORY_STORE, WasmOp.Kind.MEMORY_LOAD -> {
                 val rparams = arrayListOf<Block>()

@@ -176,7 +176,7 @@ class Wasm {
         return (0 until n).map { type }
     }
 
-    class Code(val locals: List<List<WasmType>>, val body: Expr) {
+    class Code(val locals: List<List<AstLocal>>, val body: Expr) {
         val flatLocals get() = locals.flatMap { it }
     }
 
@@ -186,7 +186,7 @@ class Wasm {
     fun SyncStream.readCode(): Code {
         val size = readLEB128()
         val ss = readBytesExact(size).openSync()
-        val locals = ss.readVec { ss.readCodeLocals() }
+        val locals = ss.readVec { index -> ss.readCodeLocals().map { AstLocal(index, it) } }
         val expr = ss.readExpr()
         return Code(locals, expr)
     }
@@ -217,7 +217,7 @@ class Wasm {
         //println("%02X".format(type))
         return when (type) {
             0x40 -> WasmType.void
-            0x60 -> WasmType.Function(readVec { readType() }, readVec { readType() })
+            0x60 -> WasmType.Function(readVec { AstLocal(it, readType()) }, readVec { readType() })
             0x7F -> WasmType.i32
             0x7E -> WasmType.i64
             0x7D -> WasmType.f32
