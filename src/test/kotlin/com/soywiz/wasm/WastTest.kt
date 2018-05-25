@@ -8,9 +8,15 @@ class WastTest {
     @Test
     fun name() = suspendTest {
         val wasm = WastReader.parseModule(resourcesVfs["wasm-program.wast"].readString())
+        val moduleContext = BaseJavaExporter.ModuleDumpContext()
+        val exporter = JavaExporter(wasm)
+        println(exporter.dump())
+        /*
         for (func in wasm.functions) {
-            val dump = BaseJavaExporter().dump(BaseJavaExporter.DumpContext(func), func.code2!!.body)
-            println(func.name + " : " + dump.indenter)
+            val funcContext = BaseJavaExporter.DumpContext(moduleContext, func)
+            val dump = BaseJavaExporter().dump(funcContext, func.code2!!.body)
+            println(moduleContext.getName(func) + " : " + dump.indenter)
         }
+        */
     }
 }

@@ -7,11 +7,13 @@ import kotlin.collections.LinkedHashMap
 import kotlin.collections.LinkedHashSet
 import kotlin.math.*
 
-class JavaExporter(val wasm: Wasm) : BaseJavaExporter() {
+class JavaExporter(val wasm: WasmModule) : BaseJavaExporter() {
     val module = wasm
+    val moduleCtx = ModuleDumpContext()
+
     override fun dump(): Indenter = Indenter {
         line("public class Module") {
-            val mainFunc = module.functions.values.firstOrNull { it.name == "_main" }
+            val mainFunc = module.functions.firstOrNull { it.name == "_main" }
             if (mainFunc != null) {
                 line("static public void main(String[] args)") {
                     when (mainFunc.type.args.size) {
@@ -283,7 +285,7 @@ class JavaExporter(val wasm: Wasm) : BaseJavaExporter() {
             line("float Op_f32_convert_s_i32(int v) { return (float)v; }")
 
             // stdlib
-            val importedFunctions = module.functions.values.map { it.name }.toSet()
+            val importedFunctions = module.functions.map { it.name }.toSet()
             if ("_time" in importedFunctions) {
                 line("int _time(int addr) { int time = (int)(System.currentTimeMillis() / 1000L); if (addr != 0) sw(addr, time); return time; }")
             }
@@ -296,7 +298,7 @@ class JavaExporter(val wasm: Wasm) : BaseJavaExporter() {
                     indices[data.index] = "${ast.expr.value}"
                 } else {
                     line("private int computeDataIndex${data.index}()") {
-                        line(ast.dump(DumpContext(null)).indenter)
+                        line(ast.dump(DumpContext(moduleCtx, null)).indenter)
                     }
                     indices[data.index] = "computeDataIndex${data.index}()"
                 }
@@ -318,7 +320,7 @@ class JavaExporter(val wasm: Wasm) : BaseJavaExporter() {
                     }
                 }
             }
-            for (global in module.globals.values) {
+            for (global in module.globals) {
                 if (global.import == null) {
                     line("private ${global.globalType.type.type()} compute${global.name}()") {
                         line(
@@ -328,7 +330,7 @@ class JavaExporter(val wasm: Wasm) : BaseJavaExporter() {
                                     -1,
                                     WasmType.Function(listOf(), listOf(global.globalType.type))
                                 )
-                            ).dump(DumpContext(null)).indenter
+                            ).dump(DumpContext(moduleCtx, null)).indenter
                         )
                     }
                     line("${global.globalType.type.type()} ${global.name} = compute${global.name}();")
@@ -375,7 +377,7 @@ class JavaExporter(val wasm: Wasm) : BaseJavaExporter() {
 
             //println(funcToIdx)
 
-            for ((type, functions) in module.functions.values.groupBy { it.type }) {
+            for ((type, functions) in module.functions.groupBy { it.type }) {
                 //val funcs = functions.joinToString(", ") { "this::${it.name}" }
                 //line("val functions${type.signature} = arrayOf($funcs)")
                 //val funcType = type.typeName()
@@ -399,7 +401,7 @@ class JavaExporter(val wasm: Wasm) : BaseJavaExporter() {
                 }
             }
 
-            for (func in module.functions.values) {
+            for (func in module.functions) {
                 line("// func (${func.index}) : ${func.name}")
                 line(dump(func))
             }
@@ -407,10 +409,8 @@ class JavaExporter(val wasm: Wasm) : BaseJavaExporter() {
     }
 
     fun dump(func: WasmFunc): Indenter = Indenter {
-        val code = func.code
-        if (code != null) {
-            val body = code.body
-            val bodyAst = body.toAst(wasm, func)
+        val bodyAst = func.getAst(wasm)
+        if (bodyAst != null) {
             val visibility = if (func.export != null) "public " else "private "
             val args = func.type.args.withIndex().joinToString(", ") { "${it.value.type()} p" + it.index + "" }
             line("$visibility${func.type.retType.type()} ${func.name}($args)") {
@@ -427,7 +427,7 @@ class JavaExporter(val wasm: Wasm) : BaseJavaExporter() {
                 line("long phi_i64 = 0L;")
                 line("float phi_f32 = 0f;")
                 line("double phi_f64 = 0.0;")
-                line(bodyAst.dump(DumpContext(func)).indenter)
+                line(bodyAst.dump(DumpContext(moduleCtx, func)).indenter)
             }
         }
     }
@@ -436,6 +436,9 @@ class JavaExporter(val wasm: Wasm) : BaseJavaExporter() {
 }
 
 open class BaseJavaExporter : Exporter {
+    companion object {
+        val JAVA_KEYWORDS = setOf("do", "while", "if", "else", "void", "int") // ...
+    }
     override fun dump(): Indenter {
         TODO()
     }
@@ -464,9 +467,46 @@ open class BaseJavaExporter : Exporter {
 
     fun DumpResult.appendBreaks(breaks: Breaks) = this.apply { breaks.concatResult(this) }
 
-    class DumpContext(val func: WasmFunc?) {
+    class NameAllocator(val fixer: (String) -> String = { it }) {
+        val allocatedNames = LinkedHashSet<String>()
+
+        fun allocate(name: String): String {
+            var rname = fixer(name)
+            while (rname in allocatedNames) {
+                rname += "_" // Todo use numeric prefixes?
+            }
+            allocatedNames += rname
+            return rname
+        }
+    }
+
+    class ModuleDumpContext() {
+        val usedNames = NameAllocator {
+            var res = it.replace('$', '_').replace('-', '_')
+            while (res in JAVA_KEYWORDS) res = "_$res"
+            res
+        }
+        val globalNames = LinkedHashMap<AstGlobal, String>()
+        val functionNames = LinkedHashMap<WasmFunc, String>()
+
+        fun getName(func: WasmFunc): String = functionNames.getOrPut(func) { usedNames.allocate(func.name) }
+        fun getName(global: AstGlobal): String = globalNames.getOrPut(global) { usedNames.allocate(global.name) }
+    }
+
+    class DumpContext(val moduleCtx: ModuleDumpContext, val func: WasmFunc?) {
         val debug get() = false
         //val debug get() = func?.name == "_memset"
+        val usedNames = NameAllocator {
+            var res = it.replace('$', '_').replace('-', '_')
+            while (res in JAVA_KEYWORDS) res = "_$res"
+            res
+        }
+        val localNames = LinkedHashMap<AstLocal, String>()
+        val labelNames = LinkedHashMap<AstLabel, String>()
+
+        fun getName(local: AstLocal): String = localNames.getOrPut(local) { usedNames.allocate(local.name) }
+        fun getName(label: AstLabel): String = labelNames.getOrPut(label) { usedNames.allocate(label.name) }
+        fun getName(global: AstGlobal): String = moduleCtx.getName(global)
     }
 
     fun dump(ctx: DumpContext, stm: Wast.Stm, out: Indenter = Indenter { }): DumpResult {
@@ -487,10 +527,10 @@ open class BaseJavaExporter : Exporter {
                     }
                 }
             }
-            is Wast.SetLocal -> out.line("${this.local.name} = ${this.expr.dump()};")
-            is Wast.SetGlobal -> out.line("${this.global.name} = ${this.expr.dump()};")
+            is Wast.SetLocal -> out.line("${ctx.getName(local)} = ${this.expr.dump(ctx)};")
+            is Wast.SetGlobal -> out.line("${ctx.getName(global)} = ${this.expr.dump(ctx)};")
             is Wast.RETURN -> {
-                out.line("return ${this.expr.dump()};")
+                out.line("return ${this.expr.dump(ctx)};")
                 unreachable = true
             }
             is Wast.RETURN_VOID -> {
@@ -499,7 +539,7 @@ open class BaseJavaExporter : Exporter {
             }
             is Wast.BLOCK -> {
                 lateinit var result: DumpResult
-                val optLabel = if (label != null) "${label.name}: " else ""
+                val optLabel = if (label != null) "${ctx.getName(label)}: " else ""
                 out.line("${optLabel}do") {
                     result = this.stm.dump(ctx, out).appendBreaks(breaks)
                 }
@@ -510,7 +550,7 @@ open class BaseJavaExporter : Exporter {
             }
             is Wast.LOOP -> {
                 lateinit var result: DumpResult
-                val optLabel = if (label != null) "${label.name}: " else ""
+                val optLabel = if (label != null) "${ctx.getName(label)}: " else ""
                 out.line("${optLabel}while (true)") {
                     result = this.stm.dump(ctx, out).appendBreaks(breaks)
                     if (result.unreachable) {
@@ -524,12 +564,12 @@ open class BaseJavaExporter : Exporter {
                 if (ctx.debug) println("LOOP. ${ctx.func?.name} (loop_label=${label?.name}). Unreachable: $unreachable, $breaks")
             }
             is Wast.IF -> {
-                out.line("if (${this.cond.dump()} != 0)") {
+                out.line("if (${this.cond.dump(ctx)} != 0)") {
                     val result = this.btrue.dump(ctx, out).appendBreaks(breaks)
                 }
             }
             is Wast.IF_ELSE -> {
-                out.line("if (${this.cond.dump()} != 0)") {
+                out.line("if (${this.cond.dump(ctx)} != 0)") {
                     val result = this.btrue.dump(ctx, out).appendBreaks(breaks)
                 }
                 out.line("else") {
@@ -537,26 +577,26 @@ open class BaseJavaExporter : Exporter {
                 }
             }
             is Wast.BR -> {
-                out.line(this.label.goto() + ";")
+                out.line(this.label.goto(ctx) + ";")
                 breaks.addLabel(this.label)
                 unreachable = true
             }
             is Wast.BR_IF -> {
-                out.line("if (${this.cond.dump()} != 0) ${this.label.goto()};")
+                out.line("if (${this.cond.dump(ctx)} != 0) ${this.label.goto(ctx)};")
                 breaks.addLabel(label)
             }
             is Wast.BR_TABLE -> {
-                out.line("switch (${this.subject.dump()})") {
+                out.line("switch (${this.subject.dump(ctx)})") {
                     for ((index, label) in this.labels) {
-                        out.line("case $index: ${label.goto()};")
+                        out.line("case $index: ${label.goto(ctx)};")
                         breaks.addLabel(label)
                     }
-                    out.line("default: ${this.default.goto()};")
+                    out.line("default: ${this.default.goto(ctx)};")
                     breaks.addLabel(default)
                 }
             }
             is Wast.STM_EXPR -> {
-                var exprStr = this.expr.dump()
+                var exprStr = this.expr.dump(ctx)
                 while (exprStr.startsWith("(") && exprStr.endsWith(")")) {
                     exprStr = exprStr.substring(1, exprStr.length - 1)
                 }
@@ -569,10 +609,10 @@ open class BaseJavaExporter : Exporter {
             }
             is Wast.WriteMemory -> {
                 //out.line("${this.access()} = ${this.value.dump()}")
-                out.line("${this.op}(${this.address.dump()}, ${this.offset}, ${this.align}, ${this.value.dump()});")
+                out.line("${this.op}(${this.address.dump(ctx)}, ${this.offset}, ${this.align}, ${this.value.dump(ctx)});")
             }
             is Wast.SetPhi -> {
-                out.line("phi_${this.blockType} = ${this.value.dump()};")
+                out.line("phi_${this.blockType} = ${this.value.dump(ctx)};")
             }
             is Wast.Unreachable -> {
                 out.line("// Unreachable")
@@ -587,22 +627,26 @@ open class BaseJavaExporter : Exporter {
     }
 
 
-    fun Wast.Expr.dump(): String {
+    fun Wast.Expr.dump(ctx: DumpContext): String {
         return when (this) {
             is Wast.Const -> when (this.type) {
                 WasmType.f32 -> "(${this.value}f)"
                 WasmType.i64 -> "(${this.value}L)"
                 else -> "(${this.value})"
             }
-            is Wast.Local -> this.local.name
-            is Wast.Global -> global.name
+            is Wast.Local -> ctx.getName(local)
+            is Wast.Global -> ctx.getName(global)
             is Wast.Unop -> {
                 //"(" + " ${this.op.symbol} " + this.expr.dump() + ")"
-                "$op(${this.expr.dump()})"
+                "$op(${this.expr.dump(ctx)})"
+            }
+            is Wast.Terop -> {
+                //"(" + " ${this.op.symbol} " + this.expr.dump() + ")"
+                "(((${this.cond.dump(ctx)}) != 0) ? (${this.etrue.dump(ctx)}) : (${this.efalse.dump(ctx)}))"
             }
             is Wast.Binop -> {
-                val ld = l.dump()
-                val rd = r.dump()
+                val ld = l.dump(ctx)
+                val rd = r.dump(ctx)
                 when (op) {
                 //Ops.Op_i32_add -> "($ld + $rd)"
                 //Ops.Op_i32_sub -> "($ld - $rd)"
@@ -611,15 +655,15 @@ open class BaseJavaExporter : Exporter {
             }
             is Wast.CALL -> {
                 val name = if (this.func.name.startsWith("___syscall")) "___syscall" else this.func.name
-                "$name(${this.args.map { it.dump() }.joinToString(", ")})"
+                "$name(${this.args.map { it.dump(ctx) }.joinToString(", ")})"
             }
         //is A.CALL_INDIRECT -> "((Op_getFunction(${this.address.dump()}) as (${this.type.type()}))" + "(" + this.args.map { it.dump() }.joinToString(
-            is Wast.CALL_INDIRECT -> "(invoke_${this.type.signature}(${this.address.dump()}, " + this.args.map { it.dump() }.joinToString(
+            is Wast.CALL_INDIRECT -> "(invoke_${this.type.signature}(${this.address.dump(ctx)}, " + this.args.map { it.dump(ctx) }.joinToString(
                 ", "
             ) + "))"
             is Wast.ReadMemory -> {
                 //this.access()
-                "${this.op}(${this.address.dump()}, ${this.offset}, ${this.align})"
+                "${this.op}(${this.address.dump(ctx)}, ${this.offset}, ${this.align})"
             }
             is Wast.Phi -> "phi_${this.type}"
             else -> "???($this)"
@@ -645,7 +689,7 @@ open class BaseJavaExporter : Exporter {
         else -> "$this"
     }
 
-    fun AstLabel.goto() = "${this.kind.keyword} ${this.name}"
+    fun AstLabel.goto(ctx: DumpContext) = "${this.kind.keyword} ${ctx.getName(this)}"
 }
 
 fun ByteArray.chunks(chunkSize: Int): List<ByteArray> {

@@ -22,6 +22,16 @@ data class WasmFunc(
     var code2: Wasm.Code2? = null,
     val name2: String? = null
 ) : WasmFuncRef {
+    fun getAst(wasm: WasmModule): Wast.Stm? = when {
+        code != null -> {
+            val body = code!!.body
+            val bodyAst = body.toAst(wasm, func)
+            bodyAst
+        }
+        code2 != null -> code2!!.body
+        else -> null
+    }
+
     override val func = this
     val rlocals by lazy { type.args + (code?.flatLocals ?: listOf()) }
 

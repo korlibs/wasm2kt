@@ -23,11 +23,12 @@ open class WastVisitor {
             is Wast.InvalidExpr -> visit(a)
             is Wast.Unop -> visit(a)
             is Wast.Binop -> visit(a)
+            is Wast.Terop -> visit(a)
             is Wast.CALL -> visit(a)
             is Wast.CALL_INDIRECT -> visit(a)
             is Wast.ReadMemory -> visit(a)
             is Wast.Phi -> visit(a)
-            else -> TODO()
+            else -> TODO("$a")
         }
     }
 
@@ -52,6 +53,12 @@ open class WastVisitor {
     open fun visit(a: Wast.Binop) {
         visit(a.l)
         visit(a.r)
+    }
+
+    open fun visit(a: Wast.Terop) {
+        visit(a.cond)
+        visit(a.etrue)
+        visit(a.efalse)
     }
 
     open fun visit(a: Wast.CALL) {

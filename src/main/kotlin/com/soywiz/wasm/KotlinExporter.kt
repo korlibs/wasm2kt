@@ -2,14 +2,17 @@ package com.soywiz.wasm
 
 import com.soywiz.korio.error.*
 
-class KotlinExporter(val wasm: Wasm) : Exporter {
+/**
+ * @TODO: Create a BaseExporter, so Java and Kotlin exporters can reuse code
+ */
+class KotlinExporter(val wasm: WasmModule) : Exporter {
     val module = wasm
     override fun dump(): Indenter = Indenter {
         //line("@Suppress(\"UNCHECKED_CAST\")")
         //line("@Suppress(\"UNCHECKED_CAST\", \"UNREACHABLE_CODE\")")
         line("@Suppress(\"UNCHECKED_CAST\", \"UNREACHABLE_CODE\", \"RedundantExplicitType\", \"UNUSED_VARIABLE\", \"VARIABLE_WITH_REDUNDANT_INITIALIZER\", \"CanBeVal\", \"RedundantUnitReturnType\", \"unused\", \"SelfAssignment\", \"ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE\", \"UNUSED_VALUE\", \"SelfAssignment\", \"LiftReturnOrAssignment\", \"LocalVariableName\", \"FunctionName\")")
         line("class Module : WasmModule()") {
-            val mainFunc = module.functions.values.firstOrNull { it.name == "_main" }
+            val mainFunc = module.functions.firstOrNull { it.name == "_main" }
             if (mainFunc != null) {
                 line("companion object") {
                     line("@JvmStatic fun main(args: Array<String>)") {
@@ -39,7 +42,7 @@ class KotlinExporter(val wasm: Wasm) : Exporter {
                     line("__putBytes(${indices[data.index]}, byteArrayOf(${data.data.joinToString(", ") { "$it" }}))")
                 }
             }
-            for (global in module.globals.values) {
+            for (global in module.globals) {
                 if (global.import == null) {
                     line("private fun compute${global.name}(): ${global.globalType.type.type()}") {
                         line(global.e!!.toAst(wasm, WasmFunc(-1, WasmType.Function(listOf(), listOf(global.globalType.type)))).dump())
@@ -51,13 +54,13 @@ class KotlinExporter(val wasm: Wasm) : Exporter {
             val funcs = module.elements.flatMap { it.funcIdxs }.map { module.functions[it] ?: invalidOp("Invalid referenced function $it") }.joinToString(", ") { "this::${it.name}" }
             line("val functions = arrayOf($funcs)")
 
-            for ((type, functions) in module.functions.values.groupBy { it.type }) {
+            for ((type, functions) in module.functions.groupBy { it.type }) {
                 //val funcs = functions.joinToString(", ") { "this::${it.name}" }
                 //line("val functions${type.signature} = arrayOf($funcs)")
                 line("fun functions${type.signature}(index: Int) = functions[index] as ${type.type()}")
             }
 
-            for (func in module.functions.values) {
+            for (func in module.functions) {
                 line("// func (${func.index}) : ${func.name}")
                 line(dump(func))
             }
@@ -114,10 +117,10 @@ class KotlinExporter(val wasm: Wasm) : Exporter {
             }
             is Wast.CALL -> {
                 val name = if (this.func.name.startsWith("___syscall")) "___syscall" else this.func.name
-                "$name(${this.args.map { it.dump() }.joinToString(", ")})"
+                "this.$name(${this.args.map { it.dump() }.joinToString(", ")})"
             }
             //is A.CALL_INDIRECT -> "((Op_getFunction(${this.address.dump()}) as (${this.type.type()}))" + "(" + this.args.map { it.dump() }.joinToString(
-            is Wast.CALL_INDIRECT -> "(functions${this.type.signature}(${this.address.dump()})(" + this.args.map { it.dump() }.joinToString(
+            is Wast.CALL_INDIRECT -> "(this.functions${this.type.signature}(${this.address.dump()})(" + this.args.map { it.dump() }.joinToString(
                 ", "
             ) + "))"
             is Wast.ReadMemory -> {
@@ -156,7 +159,7 @@ class KotlinExporter(val wasm: Wasm) : Exporter {
                 for (e in stms) e.dump(out)
             }
             is Wast.SetLocal -> out.line("${this.local.name} = ${this.expr.dump()}")
-            is Wast.SetGlobal -> out.line("${this.global.name} = ${this.expr.dump()}")
+            is Wast.SetGlobal -> out.line("this.${this.global.name} = ${this.expr.dump()}")
             is Wast.RETURN -> out.line("return ${this.expr.dump()}")
             is Wast.RETURN_VOID -> out.line("return")
             is Wast.BLOCK -> {

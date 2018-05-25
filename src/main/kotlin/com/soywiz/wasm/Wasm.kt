@@ -11,10 +11,24 @@ import kotlin.collections.component2
 import kotlin.collections.set
 
 class WasmModule(
-    val functions: List<WasmFunc>
-)
+    val functions: List<WasmFunc>,
+    val datas: List<Wasm.Data>,
+    val types: List<WasmType>,
+    val globals: List<Wasm.Global>,
+    val elements: List<Wasm.Element>
+) {
+    val globalsByIndex = globals.associateBy { it.index }
+}
 
 class Wasm {
+    fun toModule() = WasmModule(
+        functions = functions.values.toList(),
+        datas = datas,
+        types = types,
+        globals = globals.values.toList(),
+        elements = elements.toList()
+    )
+
     companion object {
         val INT_FUNC_TYPE = WasmType.Function(listOf(), listOf(WasmType.i32))
 
@@ -49,8 +63,8 @@ class Wasm {
             val wasm = Wasm()
             wasm.read(s)
             val exporter = when (lang) {
-                "kotlin" -> KotlinExporter(wasm)
-                "java" -> JavaExporter(wasm)
+                "kotlin" -> KotlinExporter(wasm.toModule())
+                "java" -> JavaExporter(wasm.toModule())
                 else -> error("Unsupported exporter '$lang'. Only supported 'java' and 'kotlin'.")
             }
             //val exporter = JavaExporter(this@Wasm)

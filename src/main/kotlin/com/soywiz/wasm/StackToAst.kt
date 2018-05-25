@@ -11,13 +11,13 @@ class AstLabel(val kind: FlowKind, val name: String, val blockType: WasmType) {
     constructor(kind: FlowKind, index: Int, blockType: WasmType) : this(kind, "label$index", blockType)
 }
 
-fun Wasm.Expr.toAst(wasm: Wasm, func: WasmFunc): Wast.Stm {
+fun Wasm.Expr.toAst(wasm: WasmModule, func: WasmFunc): Wast.Stm {
     val ast2 = toAst2(AstCtx(wasm, func), AstStack(), func.type.retType, func.type, 0)
     //println(ast2)
     return ast2
 }
 
-class AstCtx(val wasm: Wasm, val func: WasmFunc) {
+class AstCtx(val wasm: WasmModule, val func: WasmFunc) {
     private val labels = arrayListOf<AstLabel>()
     private var lastLabel = 1
 
@@ -311,7 +311,7 @@ data class AstLocal(val name: String, val type: WasmType, val index: Int = -1) {
 }
 
 data class AstGlobal(val name: String, val type: WasmType) {
-    constructor(wasm: Wasm, index: Int, type: WasmType) : this(wasm.globals[index]?.name ?: "g$index", type)
+    constructor(wasm: WasmModule, index: Int, type: WasmType) : this(wasm.globalsByIndex[index]?.name ?: "g$index", type)
     //val name by lazy { wasm.globals[index]?.name ?: "g$index" }
 }
 

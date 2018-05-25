@@ -41,7 +41,13 @@ object WastReader {
             }
         }
         println(functionTypes)
-        return WasmModule(functions)
+        return WasmModule(
+            functions = functions,
+            datas = listOf(),
+            types = listOf(),
+            globals = listOf(),
+            elements = listOf()
+        )
     }
 
     fun Block.parseParam(): List<String> {
