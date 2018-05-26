@@ -57,7 +57,7 @@ class Wasm {
                 val arg = margs.removeFirst()
                 if (arg.startsWith("-")) {
                     when (arg) {
-                        "-out" -> {
+                        "-lang" -> {
                             lang = margs.removeFirst()
                         }
                         "-class" -> {
@@ -74,7 +74,7 @@ class Wasm {
                     file = arg
                 }
             }
-            if (showHelp || file == null) error("wasm2kt [-out java|kotlin] [-class Module] [-package my.java.package] <file.wasm|wast>")
+            if (showHelp || file == null) error("wasm2kt [-lang java|kotlin] [-class Module] [-package my.java.package] <file.wasm|wast>")
             val fileContents = file.uniVfs.readAll()
 
             val module = when {
