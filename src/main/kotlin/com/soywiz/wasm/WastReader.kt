@@ -676,14 +676,14 @@ open class WastReader {
                 '=' -> run { out += Op(read(1)) }
                 '"' -> {
                     readChar()
-                    var str = ""
+                    var str = StringBuilder()
                     loop@ while (!eof) {
                         val pp = peek()
                         when (pp) {
                             '\\' -> {
                                 val p1 = read()
                                 val p2 = read()
-                                str += when (p2) {
+                                str.append(when (p2) {
                                     '\\' -> '\\'
                                     '\"' -> '\"'
                                     '\'' -> '\''
@@ -692,27 +692,29 @@ open class WastReader {
                                     'n' -> '\n'
                                     in '0'..'9', in 'a'..'f', in 'A'..'F' -> {
                                         val p3 = read()
-                                        "$p2$p3".toInt(16).toChar() // @TODO: Optimize this!
+                                        val vh = HexUtil.unhex(p2)
+                                        val vl = HexUtil.unhex(p3)
+                                        ((vh shl 8) or vl).toChar()
                                     }
                                     else -> TODO("unknown string escape sequence $p1$p2")
-                                }
+                                })
                             }
                             '\"' -> {
                                 readChar()
                                 break@loop
                             }
-                            else -> str += read()
+                            else -> str.append(read())
                         }
                     }
-                    out += Str(str)
+                    out += Str(str.toString())
                 }
-                in '0'..'9', '-' -> {
-                    out += Num(readWhile { it in '0'..'9' || it == '.' || it == 'e' || it == 'E' || it == '-' })
+                in '0'..'9', '-', '+' -> {
+                    out += Num(readWhile { it in '0'..'9' || it == '.' || it == 'e' || it == 'E' || it == '-' || it == '+' })
                 }
                 in 'a'..'z', in 'A'..'Z', '$', '%', '_', '.', '/' -> {
                     out += Id(readWhile { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '$' || it == '%' || it == '_' || it == '.' || it == '/' || it == '-' || it == '+' || it == '=' })
                 }
-                else -> invalidOp("Unknown '$peek'")
+                else -> invalidOp("Unknown '$peek' at ${this.pos}")
             }
         }
         return out
@@ -726,3 +728,13 @@ open class WastReader {
         }
     }
 }
+
+object HexUtil {
+    fun unhex(char: Char): Int = when (char) {
+        in '0'..'9' -> char.toInt()
+        in 'a'..'f' -> char.toInt() + 10
+        in 'A'..'F' -> char.toInt() + 10
+        else -> throw RuntimeException("Not an hex character")
+    }
+}
+
