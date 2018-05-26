@@ -67,6 +67,12 @@ class Wasm {
             println(Wasm.readAndConvert(data, lang))
         }
 
+        fun read(s: SyncStream): WasmModule {
+            val wasm = Wasm()
+            wasm.read(s)
+            return wasm.toModule()
+        }
+
         fun readAndConvert(s: SyncStream, lang: String): Indenter {
             val wasm = Wasm()
             wasm.read(s)

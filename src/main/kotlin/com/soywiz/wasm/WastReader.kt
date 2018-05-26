@@ -154,7 +154,7 @@ open class WastReader {
             "global" -> {
                 val importName = import.string(0)
                 val importType = WasmType(import.string(1))
-                println("GLOBAL: $importName: $importType <-- $ns::$name")
+                //println("GLOBAL: $importName: $importType <-- $ns::$name")
                 //AstGlobal(importName, importType)
                 Wasm.WasmGlobal(
                     globalType = WasmType.Global(importType, false),

@@ -84,7 +84,8 @@ class IntegrationTest : BaseIntegrationTest() {
                 return 0;
             }
             """,
-            optimization = 0
+            optimization = 0,
+            wast = true
         )
     }
 }
@@ -136,7 +137,7 @@ open class BaseIntegrationTest {
         return result
     }
 
-    protected fun compileAndExecuteJava(source: String, vararg args: String, optimization: Int = 3): String {
+    protected fun compileAndExecuteJava(source: String, vararg args: String, optimization: Int = 3, wast: Boolean = false): String {
         var result = ""
         runBlocking {
             root["wasm-program.c"].writeString(source)
@@ -154,8 +155,11 @@ open class BaseIntegrationTest {
             )
 
             // WASM -> Java
-            val data = root["wasm-program.wasm"].readAll().openSync()
-            root["Module.java"].writeString(Wasm.readAndConvert(data, "java").toString())
+            val wasm = when (wast) {
+                true -> WastReader().parseModule(root["wasm-program.wast"].readString())
+                false -> Wasm.read(root["wasm-program.wasm"].readAll().openSync())
+            }
+            root["Module.java"].writeString(JavaExporter(wasm).dump().toString())
 
             // Java -> Class -> Execute
             val argsStr = args.joinToString(" ") { it }
@@ -167,8 +171,8 @@ open class BaseIntegrationTest {
         return result
     }
 
-    protected fun assertGccAndJavaExecutionAreEquals(source: String, vararg args: String, optimization: Int = 3) {
-        val javaOutput = compileAndExecuteJava(source, *args, optimization = optimization)
+    protected fun assertGccAndJavaExecutionAreEquals(source: String, vararg args: String, optimization: Int = 3, wast: Boolean = false) {
+        val javaOutput = compileAndExecuteJava(source, *args, optimization = optimization, wast = wast)
         val gccOutput = compileAndExecuteGCC(source, *args)
         println(gccOutput)
         assertEquals(gccOutput, javaOutput, "Executing args=${args.toList()}\n" + source.trimIndent())
