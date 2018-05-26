@@ -46,6 +46,9 @@ class JavaExporter(val module: WasmModule) : BaseJavaExporter() {
         Indenter {
             val names = JavaNameAllocator()
             val className = names.allocate(config.className)
+            if (config.packageName.isNotEmpty()) {
+                line("package ${config.packageName};")
+            }
             line("public class $className") {
                 val mainFunc = module.functions.firstOrNull { it.export?.name == "_main" }
                 if (mainFunc != null) {

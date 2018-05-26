@@ -7,5 +7,6 @@ interface Exporter {
 }
 
 data class ExportConfig(
-    val className: String
+    val className: String,
+    val packageName: String = ""
 )

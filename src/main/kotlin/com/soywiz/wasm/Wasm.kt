@@ -50,6 +50,7 @@ class Wasm {
             //var lang: String = "kotlin"
             var lang: String = "java"
             var className = "Module"
+            var packageName = ""
             var file: String? = null
             if (margs.isEmpty()) showHelp = true
             while (margs.isNotEmpty()) {
@@ -62,6 +63,9 @@ class Wasm {
                         "-class" -> {
                             className = margs.removeFirst()
                         }
+                        "-package" -> {
+                            packageName = margs.removeFirst()
+                        }
                         "-h", "-help", "--help", "-?" -> {
                             showHelp = true
                         }
@@ -70,7 +74,7 @@ class Wasm {
                     file = arg
                 }
             }
-            if (showHelp || file == null) error("wasm2kt [-out java|kotlin] [-class Module] <file.wasm|wast>")
+            if (showHelp || file == null) error("wasm2kt [-out java|kotlin] [-class Module] [-package my.java.package] <file.wasm|wast>")
             val fileContents = file.uniVfs.readAll()
 
             val module = when {
@@ -79,7 +83,7 @@ class Wasm {
                 else -> TODO("Not a WASM or WAST file")
             }
             val exporter = exporter(lang, module)
-            println(exporter.dump(ExportConfig(className)))
+            println(exporter.dump(ExportConfig(className = className, packageName = packageName)))
         }
 
         fun exporter(lang: String, wasm: WasmModule): Exporter {
