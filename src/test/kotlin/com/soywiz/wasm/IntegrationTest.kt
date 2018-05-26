@@ -89,6 +89,27 @@ class IntegrationTest : BaseIntegrationTest() {
             wast = true
         )
     }
+
+    @Test
+    fun testArgs() {
+        assertGccAndJavaExecutionAreEquals(
+            """
+            #include <stdio.h>
+            #include <stdlib.h>
+            #include <time.h>
+
+            int main(int args, char** argv) {
+                for (int n = 1; n < args; n++) {
+                    printf("%s\n", argv[n]);
+                }
+                return 0;
+            }
+            """,
+            optimization = 0,
+            wast = true,
+            args = *arrayOf("a", "bc", "def")
+        )
+    }
 }
 
 @Suppress("MemberVisibilityCanBePrivate")
@@ -171,7 +192,7 @@ open class BaseIntegrationTest {
             val argsStr = args.joinToString(" ") { it }
             result = runCommand(
                 "docker", "run", "-v", "${root.absolutePath}:/src", JDK_IMAGE,
-                "/bin/sh", "-c", "javac /src/Module.java && java -cp /src Module $argsStr}"
+                "/bin/sh", "-c", "javac /src/Module.java && java -cp /src Module $argsStr"
             )
         }
         return result

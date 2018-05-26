@@ -268,6 +268,7 @@ enum class WasmOp(
         operator fun get(index: Int): WasmOp = OPS_BY_ID[index] ?: invalidOp("Invalid OP $index")
         operator fun get(name: String): WasmOp = OPS_BY_SNAME[name] ?: invalidOp("Invalid OP $name")
         operator fun invoke(index: Int): WasmOp = OPS_BY_ID[index] ?: invalidOp("Invalid OP $index")
-        operator fun invoke(name: String): WasmOp = OPS_BY_SNAME[name] ?: invalidOp("Invalid OP $name")
+        operator fun invoke(name: String): WasmOp = OPS_BY_SNAME[name]
+                ?: invalidOp("Invalid OP $name")
     }
 }

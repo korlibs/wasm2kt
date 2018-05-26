@@ -421,7 +421,15 @@ open class WastReader {
                 }
             }
             WasmOp.Kind.CALL -> {
-                val name = string(0)
+                val nameRaw = params[0]
+                val name = when (nameRaw) {
+                    is String -> nameRaw
+                    is Block -> {
+                        check(nameRaw.name == "type")
+                        nameRaw.string(0)
+                    }
+                    else -> invalidOp
+                }
                 val args = (1 until nparams).map { node(it, ctx) as Wast.Expr }
                 if (WasmOp(block.name) == WasmOp.Op_call) {
                     Wast.CALL(functionHeaders[name] ?: error("Can't find function with name $name"), args)
@@ -635,6 +643,13 @@ open class WastReader {
             when (item) {
                 OPEN_BRAC -> {
                     read()
+
+                    // IGNORE EMPTY BLOCKS
+                    if (peek() == CLOSE_BRAC) {
+                        read()
+                        continue@loop
+                    }
+
                     val block = parseLevel(rcomment)
                     rcomment = null
                     out.add(block)
@@ -668,10 +683,20 @@ open class WastReader {
                     readChar() // skip
                 }
                 ';' -> {
+                    readChar()
                     val comment = readUntil('\n') ?: ""
                     out += COMMENT(comment)
                 }
-                '(' -> run { read(); out += OPEN_BRAC }
+                '(' -> run {
+                    read()
+                    if (peek() == ';') {
+                        readChar()
+                        val comment = readUntil(";)")
+                        out += COMMENT(comment)
+                    } else {
+                        out += OPEN_BRAC
+                    }
+                }
                 ')' -> run { read(); out += CLOSE_BRAC }
                 '=' -> run { out += Op(read(1)) }
                 '"' -> {
@@ -727,6 +752,18 @@ open class WastReader {
             TODO("$str")
         }
     }
+}
+
+fun StrReader.readUntil(str: String): String {
+    var out = ""
+    while (hasMore) {
+        if (peek(str.length) == str) {
+            skip(str.length)
+            break
+        }
+        out += readChar()
+    }
+    return out
 }
 
 object HexUtil {
