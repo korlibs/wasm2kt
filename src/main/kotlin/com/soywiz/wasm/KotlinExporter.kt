@@ -52,7 +52,7 @@ class KotlinExporter(val wasm: WasmModule) : Exporter {
                 }
             }
             //val funcs = module.functions.values.joinToString(", ") { "this::${it.name}" }
-            val funcs = module.elements.flatMap { it.funcIdxs }.map { module.functions[it] ?: invalidOp("Invalid referenced function $it") }.joinToString(", ") { "this::${it.name}" }
+            val funcs = module.elements.flatMap { it.funcRefs }.map { module.getFunction(it) ?: invalidOp("Invalid referenced function $it") }.joinToString(", ") { "this::${it.name}" }
             line("val functions = arrayOf($funcs)")
 
             for ((type, functions) in module.functions.groupBy { it.type }) {

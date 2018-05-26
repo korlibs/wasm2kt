@@ -42,13 +42,14 @@ class JavaExporter(val module: WasmModule) : BaseJavaExporter() {
 
     override fun dump(): Indenter = Indenter {
         line("public class Module") {
-            val mainFunc = module.functions.firstOrNull { it.name == "_main" }
+            val mainFunc = module.functions.firstOrNull { it.export?.name == "_main" }
             if (mainFunc != null) {
+                val funcName = moduleCtx.getName(mainFunc)
                 line("static public void main(String[] args)") {
                     when (mainFunc.type.args.size) {
-                        0 -> line("new Module()._main();")
-                        1 -> line("new Module()._main(0);")
-                        2 -> line("new Module()._main(0, 0);")
+                        0 -> line("new Module().$funcName();")
+                        1 -> line("new Module().$funcName(0);")
+                        2 -> line("new Module().$funcName(0, 0);")
                     }
 
                 }
@@ -234,6 +235,7 @@ class JavaExporter(val module: WasmModule) : BaseJavaExporter() {
             line("void __putBytesB64(int address, String... datas) { String out = \"\"; for (int n = 0; n < datas.length; n++) out += datas[n]; __putBytes(address, java.util.Base64.getDecoder().decode(out)); }")
             getImportGlobal("env", "DYNAMICTOP_PTR")?.let { line("int $it = DYNAMICTOP_PTR;") }
             getImportGlobal("env", "tempDoublePtr")?.let { line("int $it = 0;") }
+            getImportGlobal("env", "tableBase")?.let { line("int $it = 0;") }
             getImportGlobal("env", "ABORT")?.let { line("int $it = 0;") }
             getImportGlobal("env", "STACKTOP")?.let { line("int $it = STACKTOP;") }
             getImportGlobal("env", "STACK_MAX")?.let { line("int $it = STACK_MAX;") }
@@ -415,8 +417,8 @@ class JavaExporter(val module: WasmModule) : BaseJavaExporter() {
             //}
 
             //val funcs = module.functions.values.joinToString(", ") { "this::${it.name}" }
-            val funcToIdx = module.elements.flatMap { it.funcIdxs }.withIndex()
-                .map { (module.functions[it.value] ?: invalidOp("Invalid referenced function $it")) to it.index }
+            val funcToIdx = module.elements.flatMap { it.funcRefs }.withIndex()
+                .map { (module.getFunction(it.value) ?: invalidOp("Invalid referenced function $it")) to it.index }
                 .toMap()
             //.joinToString(", ") { createDynamicFunction(it.type, it.name) }
             //line("Object[] functions = new Object[] { $funcs };")

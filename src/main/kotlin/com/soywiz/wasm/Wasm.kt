@@ -17,7 +17,15 @@ class WasmModule(
     val globals: List<Wasm.WasmGlobal>,
     val elements: List<Wasm.Element>
 ) {
+    val functionsByName = functions.associateBy { it.name }
     val globalsByIndex = globals.associateBy { it.index }
+    fun getFunction(item: Any): WasmFunc {
+        return when (item) {
+            is Int -> functions[item]
+            is String -> functionsByName[item] ?: error("Can't find function $item")
+            else -> TODO("getFunction($item)")
+        }
+    }
 }
 
 class Wasm {
@@ -173,7 +181,8 @@ class Wasm {
         val expr = readExpr()
         val data = readBytesExact(readLEB128())
         return Data(
-            memindex = memindex, data = data, index = index, e = expr)
+            memindex = memindex, data = data, index = index, e = expr
+        )
     }
 
     fun SyncStream.readDataSection() {
@@ -360,9 +369,18 @@ class Wasm {
     fun SyncStream.readTableIdx() = readLEB128()
     fun SyncStream.readFuncIdx() = readLEB128()
 
-    data class Element(val tableIdx: Int, val expr: Expr, val funcIdxs: List<Int>)
+    data class Element(
+        val tableIdx: Int,
+        val funcIdxs: List<Int>? = null,
+        val funcNames: List<String>? = null,
+        val expr: Expr? = null,
+        val exprAst: Wast.Expr? = null
+    ) {
+        val funcRefs: List<Any> = (funcIdxs ?: funcNames)!!
+    }
 
-    fun SyncStream.readElement(): Element = Element(readTableIdx(), readExpr(), readVec { readFuncIdx() })
+    fun SyncStream.readElement(): Element =
+        Element(tableIdx = readTableIdx(), expr = readExpr(), funcIdxs = readVec { readFuncIdx() })
 
     fun SyncStream.readElementSection() {
         elements = readVec { readElement() }
@@ -390,7 +408,6 @@ class Wasm {
         trace("// GLOBAL: $gt, $e")
         return WasmGlobal(gt, indicesInTables[INDEX_GLOBALS]++, e)
     }
-
 
 
     //enum class unop {
