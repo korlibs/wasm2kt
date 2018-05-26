@@ -7,7 +7,7 @@ import com.soywiz.korio.error.*
  */
 class KotlinExporter(val wasm: WasmModule) : Exporter {
     val module = wasm
-    override fun dump(): Indenter = Indenter {
+    override fun dump(config: ExportConfig): Indenter = Indenter {
         //line("@Suppress(\"UNCHECKED_CAST\")")
         //line("@Suppress(\"UNCHECKED_CAST\", \"UNREACHABLE_CODE\")")
         line("@Suppress(\"UNCHECKED_CAST\", \"UNREACHABLE_CODE\", \"RedundantExplicitType\", \"UNUSED_VARIABLE\", \"VARIABLE_WITH_REDUNDANT_INITIALIZER\", \"CanBeVal\", \"RedundantUnitReturnType\", \"unused\", \"SelfAssignment\", \"ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE\", \"UNUSED_VALUE\", \"SelfAssignment\", \"LiftReturnOrAssignment\", \"LocalVariableName\", \"FunctionName\")")

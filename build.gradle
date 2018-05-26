@@ -13,7 +13,7 @@ buildscript {
 }
 
 group 'com.soywiz'
-version '0.0.2'
+version '0.0.3'
 
 apply plugin: 'maven'
 apply plugin: 'maven-publish'
@@ -78,4 +78,7 @@ if (hasProperty('BINTRAY_USER') && hasProperty('BINTRAY_KEY')) {
             vcsUrl = 'https://github.com/soywiz/wasm2kt.git'
         }
     }
+}
+
+task deploy(dependsOn: ['install', 'bintrayUpload']) {
 }

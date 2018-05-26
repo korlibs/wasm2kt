@@ -159,7 +159,7 @@ open class BaseIntegrationTest {
                 true -> WastReader().parseModule(root["wasm-program.wast"].readString())
                 false -> Wasm.read(root["wasm-program.wasm"].readAll().openSync())
             }
-            root["Module.java"].writeString(JavaExporter(wasm).dump().toString())
+            root["Module.java"].writeString(JavaExporter(wasm).dump(ExportConfig(className = "Module")).toString())
 
             // Java -> Class -> Execute
             val argsStr = args.joinToString(" ") { it }

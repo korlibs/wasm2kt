@@ -4,11 +4,13 @@ import com.soywiz.korio.*
 import com.soywiz.korio.error.*
 import com.soywiz.korio.lang.*
 import com.soywiz.korio.stream.*
+import com.soywiz.korio.util.*
 import com.soywiz.korio.vfs.*
 import java.util.*
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.set
+import kotlin.text.Charsets
 
 class WasmModule(
     val functions: List<WasmFunc>,
@@ -44,7 +46,9 @@ class Wasm {
         fun main(args: Array<String>) = Korio {
             val margs = LinkedList<String>(args.toList())
             var showHelp = false
-            var lang: String = "kotlin"
+            //var lang: String = "kotlin"
+            var lang: String = "java"
+            var className = "Module"
             var file: String? = null
             if (margs.isEmpty()) showHelp = true
             while (margs.isNotEmpty()) {
@@ -54,6 +58,9 @@ class Wasm {
                         "-out" -> {
                             lang = margs.removeFirst()
                         }
+                        "-class" -> {
+                            className = margs.removeFirst()
+                        }
                         "-h", "-help", "--help", "-?" -> {
                             showHelp = true
                         }
@@ -62,9 +69,25 @@ class Wasm {
                     file = arg
                 }
             }
-            if (showHelp || file == null) error("wasm2kt [-out java] <file.wasm>")
-            val data = file.uniVfs.readAll().openSync()
-            println(Wasm.readAndConvert(data, lang))
+            if (showHelp || file == null) error("wasm2kt [-out java|kotlin] [-class Module] <file.wasm|wast>")
+            val fileContents = file.uniVfs.readAll()
+
+            val module = when {
+                fileContents.readString(0, 4) == "\u0000asm" -> Wasm.read(fileContents.openSync())
+                (fileContents.readString(0, 4) == "(mod") || (file.uniVfs.extensionLC == "wast") -> WastReader().parseModule(fileContents.toString(Charsets.UTF_8))
+                else -> TODO("Not a WASM or WAST file")
+            }
+            val exporter = exporter(lang, module)
+            println(exporter.dump(ExportConfig(className)))
+        }
+
+        fun exporter(lang: String, wasm: WasmModule): Exporter {
+            val exporter = when (lang) {
+                "kotlin" -> KotlinExporter(wasm)
+                "java" -> JavaExporter(wasm)
+                else -> error("Unsupported exporter '$lang'. Only supported 'java' and 'kotlin'.")
+            }
+            return exporter
         }
 
         fun read(s: SyncStream): WasmModule {
@@ -73,16 +96,10 @@ class Wasm {
             return wasm.toModule()
         }
 
-        fun readAndConvert(s: SyncStream, lang: String): Indenter {
+        fun readAndConvert(s: SyncStream, lang: String, className: String = "Module"): Indenter {
             val wasm = Wasm()
             wasm.read(s)
-            val exporter = when (lang) {
-                "kotlin" -> KotlinExporter(wasm.toModule())
-                "java" -> JavaExporter(wasm.toModule())
-                else -> error("Unsupported exporter '$lang'. Only supported 'java' and 'kotlin'.")
-            }
-            //val exporter = JavaExporter(this@Wasm)
-            return exporter.dump()
+            return exporter(lang, wasm.toModule()).dump(ExportConfig(className))
         }
     }
 

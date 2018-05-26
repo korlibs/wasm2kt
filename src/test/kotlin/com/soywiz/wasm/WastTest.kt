@@ -13,7 +13,7 @@ class WastTest {
         //val wasm = WastReader().parseModule(resourcesVfs["wasm-program-hello-world2-unoptimized.wast"].readString())
         val wasm = WastReader().parseModule(resourcesVfs["wasm-program-doubles-unoptimized.wast"].readString())
         val exporter = JavaExporter(wasm)
-        File("/tmp/my/Module.java").apply { parentFile.mkdirs() }.writeText(exporter.dump().toString())
+        File("/tmp/my/Module.java").apply { parentFile.mkdirs() }.writeText(exporter.dump(ExportConfig(className = "Module")).toString())
 
     }
 }

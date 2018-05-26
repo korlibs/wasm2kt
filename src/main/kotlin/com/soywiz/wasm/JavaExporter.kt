@@ -40,16 +40,18 @@ class JavaExporter(val module: WasmModule) : BaseJavaExporter() {
         }
     }
 
-    override fun dump(): Indenter = Indenter {
-        line("public class Module") {
+    override fun dump(config: ExportConfig): Indenter = Indenter {
+        val names = JavaNameAllocator()
+        val className = names.allocate(config.className)
+        line("public class $className") {
             val mainFunc = module.functions.firstOrNull { it.export?.name == "_main" }
             if (mainFunc != null) {
                 val funcName = moduleCtx.getName(mainFunc)
                 line("static public void main(String[] args)") {
                     when (mainFunc.type.args.size) {
-                        0 -> line("new Module().$funcName();")
-                        1 -> line("new Module().$funcName(0);")
-                        2 -> line("new Module().$funcName(0, 0);")
+                        0 -> line("new $className().$funcName();")
+                        1 -> line("new $className().$funcName(0);")
+                        2 -> line("new $className().$funcName(0, 0);")
                     }
 
                 }
@@ -343,7 +345,7 @@ class JavaExporter(val module: WasmModule) : BaseJavaExporter() {
                 }
             }
             val initBlockSize = 16
-            line("public Module()") {
+            line("public $className()") {
                 for (nn in 0 until module.datas.size step initBlockSize) {
                     line("init_$nn();")
                 }
@@ -492,7 +494,7 @@ open class BaseJavaExporter : Exporter {
             res
         }
     }
-    override fun dump(): Indenter {
+    override fun dump(config: ExportConfig): Indenter {
         TODO()
     }
 

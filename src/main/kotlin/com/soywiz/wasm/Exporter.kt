@@ -1,5 +1,9 @@
 package com.soywiz.wasm
 
 interface Exporter {
-    fun dump(): Indenter
+    fun dump(config: ExportConfig): Indenter
 }
+
+data class ExportConfig(
+    val className: String
+)
