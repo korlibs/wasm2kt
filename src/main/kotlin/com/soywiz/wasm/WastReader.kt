@@ -426,7 +426,7 @@ open class WastReader {
                 if (WasmOp(block.name) == WasmOp.Op_call) {
                     Wast.CALL(functionHeaders[name] ?: error("Can't find function with name $name"), args)
                 } else {
-                    Wast.CALL_INDIRECT(funcType(name, ctx), args.first(), args.drop(1))
+                    Wast.CALL_INDIRECT(funcType(name, ctx), args.last(), args.dropLast(1))
                 }
             }
             WasmOp.Kind.FLOW -> {

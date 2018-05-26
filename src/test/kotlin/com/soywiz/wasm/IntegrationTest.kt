@@ -18,8 +18,8 @@ class IntegrationTest : BaseIntegrationTest() {
                 return 0;
             }
             """,
-            //optimization = 0
-            optimization = 3
+            optimization = 0
+            //optimization = 3
         )
     }
 
@@ -64,29 +64,29 @@ class IntegrationTest : BaseIntegrationTest() {
         )
     }
 
-    //@Test
-    //fun testDoubles() {
-    //    assertGccAndJavaExecutionAreEquals(
-    //        """
-    //        #include <stdio.h>
-    //        #include <stdlib.h>
-    //        #include <time.h>
-    //
-    //        double toDouble(const char *str) { return atof(str); }
-    //        float toFloat(const char *str) { return (float)atof(str); }
-    //        int toInt(const char *str) { return (int)atof(str); }
-    //
-    //        int main() {
-    //            printf("%d\n", toInt("123.125"));
-    //            printf("%d\n", (int)toFloat("123.125"));
-    //            printf("%f\n", toFloat("123.125"));
-    //            //printf("%lf\n", toDouble("123.125"));
-    //            return 0;
-    //        }
-    //        """,
-    //        optimization = 0
-    //    )
-    //}
+    @Test
+    fun testDoubles() {
+        assertGccAndJavaExecutionAreEquals(
+            """
+            #include <stdio.h>
+            #include <stdlib.h>
+            #include <time.h>
+
+            double toDouble(const char *str) { return atof(str); }
+            float toFloat(const char *str) { return (float)atof(str); }
+            int toInt(const char *str) { return (int)atof(str); }
+
+            int main() {
+                printf("%d\n", toInt("123.125"));
+                printf("%d\n", (int)toFloat("123.125"));
+                printf("%f\n", toFloat("123.125"));
+                //printf("%lf\n", toDouble("123.125"));
+                return 0;
+            }
+            """,
+            optimization = 0
+        )
+    }
 }
 
 @Suppress("MemberVisibilityCanBePrivate")
