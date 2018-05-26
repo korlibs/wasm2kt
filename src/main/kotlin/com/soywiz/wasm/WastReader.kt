@@ -661,7 +661,7 @@ open class WastReader {
 
     fun StrReader.wastTokenize(): List<Token> {
         val out = arrayListOf<Token>()
-        while (!eof) {
+        loop@while (!eof) {
             val peek = peek()
             when (peek) {
                 ' ', '\t', '\r', '\n' -> {
@@ -694,7 +694,7 @@ open class WastReader {
                                         val p3 = read()
                                         val vh = HexUtil.unhex(p2)
                                         val vl = HexUtil.unhex(p3)
-                                        ((vh shl 8) or vl).toChar()
+                                        ((vh shl 4) or vl).toChar()
                                     }
                                     else -> TODO("unknown string escape sequence $p1$p2")
                                 })
