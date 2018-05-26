@@ -731,9 +731,9 @@ open class WastReader {
 
 object HexUtil {
     fun unhex(char: Char): Int = when (char) {
-        in '0'..'9' -> char.toInt()
-        in 'a'..'f' -> char.toInt() + 10
-        in 'A'..'F' -> char.toInt() + 10
+        in '0'..'9' -> (char - '0')
+        in 'a'..'f' -> (char - 'a') + 10
+        in 'A'..'F' -> (char - 'A') + 10
         else -> throw RuntimeException("Not an hex character")
     }
 }
