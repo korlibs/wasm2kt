@@ -6,6 +6,7 @@ import com.soywiz.korio.lang.*
 import com.soywiz.korio.stream.*
 import com.soywiz.korio.util.*
 import com.soywiz.korio.vfs.*
+import com.soywiz.wasm.exporter.*
 import java.util.*
 import kotlin.collections.component1
 import kotlin.collections.component2

@@ -1,4 +1,6 @@
-package com.soywiz.wasm
+package com.soywiz.wasm.exporter
+
+import com.soywiz.wasm.*
 
 interface Exporter {
     fun dump(config: ExportConfig): Indenter

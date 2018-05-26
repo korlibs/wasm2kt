@@ -3,6 +3,7 @@ package com.soywiz.wasm
 import com.soywiz.korio.async.*
 import com.soywiz.korio.stream.*
 import com.soywiz.korio.vfs.*
+import com.soywiz.wasm.exporter.*
 import kotlin.test.*
 
 class IntegrationTest : BaseIntegrationTest() {
@@ -159,7 +160,12 @@ open class BaseIntegrationTest {
                 true -> WastReader().parseModule(root["wasm-program.wast"].readString())
                 false -> Wasm.read(root["wasm-program.wasm"].readAll().openSync())
             }
-            root["Module.java"].writeString(JavaExporter(wasm).dump(ExportConfig(className = "Module")).toString())
+            root["Module.java"].writeString(
+                JavaExporter(wasm).dump(
+                    ExportConfig(
+                        className = "Module"
+                    )
+                ).toString())
 
             // Java -> Class -> Execute
             val argsStr = args.joinToString(" ") { it }

@@ -1,72 +1,85 @@
-package com.soywiz.wasm
+package com.soywiz.wasm.exporter
 
 import com.soywiz.korio.error.*
+import com.soywiz.wasm.*
 
 /**
  * @TODO: Create a BaseExporter, so Java and Kotlin exporters can reuse code
  */
 class KotlinExporter(val wasm: WasmModule) : Exporter {
     val module = wasm
-    override fun dump(config: ExportConfig): Indenter = Indenter {
-        //line("@Suppress(\"UNCHECKED_CAST\")")
-        //line("@Suppress(\"UNCHECKED_CAST\", \"UNREACHABLE_CODE\")")
-        line("@Suppress(\"UNCHECKED_CAST\", \"UNREACHABLE_CODE\", \"RedundantExplicitType\", \"UNUSED_VARIABLE\", \"VARIABLE_WITH_REDUNDANT_INITIALIZER\", \"CanBeVal\", \"RedundantUnitReturnType\", \"unused\", \"SelfAssignment\", \"ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE\", \"UNUSED_VALUE\", \"SelfAssignment\", \"LiftReturnOrAssignment\", \"LocalVariableName\", \"FunctionName\")")
-        line("class Module : WasmModule()") {
-            val mainFunc = module.functions.firstOrNull { it.name == "_main" }
-            if (mainFunc != null) {
-                line("companion object") {
-                    line("@JvmStatic fun main(args: Array<String>)") {
-                        when (mainFunc.type.args.size) {
-                            0 -> line("Module()._main()")
-                            1 -> line("Module()._main(0)")
-                            2 -> line("Module()._main(0, 0)")
+    override fun dump(config: ExportConfig): Indenter =
+        Indenter {
+            //line("@Suppress(\"UNCHECKED_CAST\")")
+            //line("@Suppress(\"UNCHECKED_CAST\", \"UNREACHABLE_CODE\")")
+            line("@Suppress(\"UNCHECKED_CAST\", \"UNREACHABLE_CODE\", \"RedundantExplicitType\", \"UNUSED_VARIABLE\", \"VARIABLE_WITH_REDUNDANT_INITIALIZER\", \"CanBeVal\", \"RedundantUnitReturnType\", \"unused\", \"SelfAssignment\", \"ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE\", \"UNUSED_VALUE\", \"SelfAssignment\", \"LiftReturnOrAssignment\", \"LocalVariableName\", \"FunctionName\")")
+            line("class Module : WasmModule()") {
+                val mainFunc = module.functions.firstOrNull { it.name == "_main" }
+                if (mainFunc != null) {
+                    line("companion object") {
+                        line("@JvmStatic fun main(args: Array<String>)") {
+                            when (mainFunc.type.args.size) {
+                                0 -> line("Module()._main()")
+                                1 -> line("Module()._main(0)")
+                                2 -> line("Module()._main(0, 0)")
+                            }
+
                         }
-
                     }
                 }
-            }
-            val indices = LinkedHashMap<Int, String>()
-            for (data in wasm.datas) {
-                TODO()
-                val ast = data.e!!.toAst(wasm, WasmFunc(-1, Wasm.INT_FUNC_TYPE))
-                if (ast is Wast.RETURN && ast.expr is Wast.Const) {
-                    indices[data.index] = "${ast.expr.value}"
-                } else {
-                    line("private fun computeDataIndex${data.index}(): Int") {
-                        line(ast.dump())
-                    }
-                    indices[data.index] = "computeDataIndex${data.index}()"
-                }
-            }
-            line("init") {
+                val indices = LinkedHashMap<Int, String>()
                 for (data in wasm.datas) {
-                    line("__putBytes(${indices[data.index]}, byteArrayOf(${data.data.joinToString(", ") { "$it" }}))")
-                }
-            }
-            for (global in module.globals) {
-                if (global.import == null) {
-                    line("private fun compute${global.name}(): ${global.globalType.type.type()}") {
-                        line(global.e!!.toAst(wasm, WasmFunc(-1, WasmType.Function(listOf(), listOf(global.globalType.type)))).dump())
+                    TODO()
+                    val ast =
+                        data.e!!.toAst(wasm, WasmFunc(-1, Wasm.INT_FUNC_TYPE))
+                    if (ast is Wast.RETURN && ast.expr is Wast.Const) {
+                        indices[data.index] = "${ast.expr.value}"
+                    } else {
+                        line("private fun computeDataIndex${data.index}(): Int") {
+                            line(ast.dump())
+                        }
+                        indices[data.index] = "computeDataIndex${data.index}()"
                     }
-                    line("var ${global.name}: ${global.globalType.type.type()} = compute${global.name}()")
                 }
-            }
-            //val funcs = module.functions.values.joinToString(", ") { "this::${it.name}" }
-            val funcs = module.elements.flatMap { it.funcRefs }.map { module.getFunction(it) ?: invalidOp("Invalid referenced function $it") }.joinToString(", ") { "this::${it.name}" }
-            line("val functions = arrayOf($funcs)")
+                line("init") {
+                    for (data in wasm.datas) {
+                        line("__putBytes(${indices[data.index]}, byteArrayOf(${data.data.joinToString(", ") { "$it" }}))")
+                    }
+                }
+                for (global in module.globals) {
+                    if (global.import == null) {
+                        line("private fun compute${global.name}(): ${global.globalType.type.type()}") {
+                            line(
+                                global.e!!.toAst(
+                                    wasm,
+                                    WasmFunc(
+                                        -1,
+                                        WasmType.Function(listOf(), listOf(global.globalType.type))
+                                    )
+                                ).dump()
+                            )
+                        }
+                        line("var ${global.name}: ${global.globalType.type.type()} = compute${global.name}()")
+                    }
+                }
+                //val funcs = module.functions.values.joinToString(", ") { "this::${it.name}" }
+                val funcs = module.elements.flatMap { it.funcRefs }
+                    .map { module.getFunction(it) ?: invalidOp("Invalid referenced function $it") }
+                    .joinToString(", ") { "this::${it.name}" }
+                line("val functions = arrayOf($funcs)")
 
-            for ((type, functions) in module.functions.groupBy { it.type }) {
-                //val funcs = functions.joinToString(", ") { "this::${it.name}" }
-                //line("val functions${type.signature} = arrayOf($funcs)")
-                line("fun functions${type.signature}(index: Int) = functions[index] as ${type.type()}")
-            }
+                for ((type, functions) in module.functions.groupBy { it.type }) {
+                    //val funcs = functions.joinToString(", ") { "this::${it.name}" }
+                    //line("val functions${type.signature} = arrayOf($funcs)")
+                    line("fun functions${type.signature}(index: Int) = functions[index] as ${type.type()}")
+                }
 
-            for (func in module.functions) {
-                line("// func (${func.index}) : ${func.name}")
-                line(dump(func))
+                for (func in module.functions) {
+                    line("// func (${func.index}) : ${func.name}")
+                    line(dump(func))
+                }
             }
         }
-    }
 
     fun dump(func: WasmFunc): Indenter = Indenter {
         val code = func.code
