@@ -10,7 +10,7 @@ import com.soywiz.korio.util.*
  * - When added debug information, this includes original private function names and local variable names
  * - Much more useful for generating debuggable code than binary wasm that is unable to produce that information
  */
-object WastReader {
+open class WastReader {
     fun parseModule(wast: String): WasmModule {
         val tokens = StrReader(wast).wastTokenize()
         val block = ListReader(tokens).parseLevel()
@@ -18,23 +18,50 @@ object WastReader {
         //println(levels)
     }
 
+    val functionTypes = arrayListOf<FunctionType>()
+    val functions = arrayListOf<WasmFunc>()
+    val globals = arrayListOf<Wasm.WasmGlobal>()
+    val astglobalsByName = LinkedHashMap<String, AstGlobal>()
+    val functionTypesByName = LinkedHashMap<String, WasmType.Function>()
+    val datas = arrayListOf<Wasm.Data>()
+
+    fun addFunctionType(type: FunctionType) {
+        functionTypes += type
+        functionTypesByName[type.name] = type.type
+    }
+
+    fun addGlobal(global: Wasm.WasmGlobal) {
+        globals += global
+        astglobalsByName[global.name] = AstGlobal(global.name, global.globalType.type)
+    }
+
     fun Block.parseModule(): WasmModule {
         check(this.name == "module")
-        val functionTypes = arrayListOf<FunctionType>()
-        val functions = arrayListOf<WasmFunc>()
-        val globals = arrayListOf<AstGlobalWithInit>()
         for (param in this.params.filterIsInstance<Block>()) {
             when (param.name) {
-                "type" -> functionTypes += param.parseType()
-                "import" -> param.parseImport()
-                "global" -> globals += param.parseGlobal()
+                "type" -> addFunctionType(param.parseType())
+                "import" -> {
+                    val import = param.parseImport()
+                    val obj = import.obj
+                    when (obj) {
+                        is Wasm.WasmGlobal -> {
+                            addGlobal(obj)
+                        }
+                        is WasmFunc -> {
+                            functions += obj
+                        }
+                    }
+                }
+                "global" -> addGlobal(param.parseGlobal())
                 "elem" -> param.parseElem()
-                "data" -> param.parseData()
+                "data" -> {
+                    datas += param.parseData(datas.size)
+                }
                 "export" -> param.parseExport()
                 "func" -> {
                     functions += param.parseFunc(
-                        globals = globals.map { it.global.name to it.global }.toMap(),
-                        functionTypes = functionTypes.map { it.name to it.type }.toMap()
+                        globals = astglobalsByName,
+                        functionTypes = functionTypesByName
                     )
                 }
                 else -> TODO("BLOCK '${param.name}'")
@@ -42,9 +69,9 @@ object WastReader {
         }
         return WasmModule(
             functions = functions,
-            datas = listOf(),
+            datas = datas,
             types = listOf(),
-            globals = listOf(),
+            globals = globals,
             elements = listOf()
         )
     }
@@ -70,41 +97,112 @@ object WastReader {
                     else -> TODO()
                 }
             }
-            return WasmType.Function(params.withIndex().map { AstLocal(it.index, WasmType(it.value)) }, result.map { WasmType(it) })
+            return WasmType.Function(
+                params.withIndex().map { AstLocal(it.index, WasmType(it.value)) },
+                result.map { WasmType(it) })
         }
 
         val type = block(1).parseFuncTypeType()
         return FunctionType(typeName, type)
     }
 
-    fun Block.parseImport() {
+    class WastImport(val ns: String, val name: String, val obj: Any) {
+        val wasmImport get() = Wasm.Import(ns, name, 0, 0, Unit)
+    }
+    class ImportMemory(val a1: String, val a2: String, val a3: String)
+    class ImportTable(val a1: String, val a2: String, val a3: String)
+
+    fun Block.parseImport(): WastImport {
         check(this.name == "import")
         val ns = string(0)
         val name = string(1)
         val import = block(2)
+        val wimport = Wasm.Import(ns, name, -1, -1, Unit)
+        val obj: Any = when (import.name) {
+            "global" -> {
+                val importName = import.string(0)
+                val importType = WasmType(import.string(1))
+                println("GLOBAL: $importName: $importType <-- $ns::$name")
+                //AstGlobal(importName, importType)
+                Wasm.WasmGlobal(
+                    globalType = WasmType.Global(importType, false),
+                    index = -1,
+                    e = null,
+                    ast = null,
+                    import = wimport,
+                    name = importName
+                )
+            }
+            "func" -> {
+                val params = arrayListOf<WasmType>()
+                val result = arrayListOf<WasmType>()
+                val importName = import.string(0)
+                for (n in 1 until import.nparams) {
+                    val info = import.block(n)
+                    val types = (0 until info.nparams).map { WasmType(info.string(it)) }
+                    when (info.name) {
+                        "param" -> params += types
+                        "result" -> result += types
+                    }
+                }
+                val funcType = WasmType.Function(params.withIndex().map { AstLocal(it.index, it.value) }, result)
+                println("FUNC: $importName ($params) -> ($result) <-- $ns::$name")
+                WasmFunc(
+                    index = -1,
+                    type = funcType,
+                    code = null,
+                    import = wimport,
+                    export = null,
+                    code2 = null,
+                    name2 = importName
+                )
+            }
+            "memory" -> {
+                val a1 = import.string(0)
+                val a2 = import.string(1)
+                val a3 = import.string(2)
+                println("MEMORY: $a1, $a2, $a3 <-- $ns::$name")
+                ImportMemory(a1, a2, a3)
+            }
+            "table" -> {
+                val a1 = import.string(0)
+                val a2 = import.string(1)
+                val a3 = import.string(2)
+                println("TABLE: $a1, $a2, $a3 <-- $ns::$name")
+                ImportTable(a1, a2, a3)
+            }
+            else -> {
+                TODO("Import ${import.name}")
+            }
+        }
 
         //println("$ns, $name, $import")
         //println(params)
+        return WastImport(ns, name, obj)
     }
 
-    class AstGlobalWithInit(val global: AstGlobal, val init: Block)
-
-    fun Block.parseGlobal(): AstGlobalWithInit {
+    fun Block.parseGlobal(): Wasm.WasmGlobal {
         check(this.name == "global")
+        val ctx = BlockBuilderContext(globals = astglobalsByName)
         val name = string(0)
         val typeBlock = block(1)
-        val expr = block(2)
+        val expr = expr(2, ctx)
         check(typeBlock.name == "mut")
+        val mut = true
         val type = WasmType(typeBlock.string(0))
-        return AstGlobalWithInit(AstGlobal(name, type), expr)
+        return Wasm.WasmGlobal(WasmType.Global(type, mut), ast = Wast.RETURN(expr), name = name)
     }
 
     fun Block.parseElem() {
         check(this.name == "elem")
     }
 
-    fun Block.parseData() {
+    fun Block.parseData(index: Int): Wasm.Data {
         check(this.name == "data")
+        val expr = expr(0, BlockBuilderContext())
+        val data = string(1)
+        val dataBA = data.map { it.toByte() }.toByteArray()
+        return Wasm.Data(index = index, data = dataBA, memindex = 0, ast = expr)
     }
 
     fun Block.parseExport() {
@@ -124,7 +222,7 @@ object WastReader {
         for (n in 1 until nparams) {
             val block = block(n)
             when (block.name) {
-                "param" , "local"-> {
+                "param", "local" -> {
                     val paramName = block.string(0)
                     val paramTypeStr = block.string(1)
                     val paramType = WasmType(paramTypeStr)
@@ -142,7 +240,15 @@ object WastReader {
                     results += resultType
                 }
                 else -> {
-                    body += stm(block, BlockBuilderContext(labels = mapOf(), locals = localsAndParams, globals = globals, functionTypes = functionTypes))
+                    body += stm(
+                        block,
+                        BlockBuilderContext(
+                            labels = mapOf(),
+                            locals = localsAndParams,
+                            globals = globals,
+                            functionTypes = functionTypes
+                        )
+                    )
                 }
             }
             //println(block)
@@ -169,10 +275,10 @@ object WastReader {
     }
 
     data class BlockBuilderContext(
-        val labels: Map<String, AstLabel>,
-        val locals: Map<String, AstLocal>,
-        val globals: Map<String, AstGlobal>,
-        val functionTypes: Map<String, WasmType.Function>
+        val labels: Map<String, AstLabel> = mapOf(),
+        val locals: Map<String, AstLocal> = mapOf(),
+        val globals: Map<String, AstGlobal> = mapOf(),
+        val functionTypes: Map<String, WasmType.Function> = mapOf()
     )
 
     fun node(block: Block, ctx: BlockBuilderContext): Wast = block.run {
@@ -266,7 +372,11 @@ object WastReader {
                                 Wast.Terop(op, expr(rparams[0], ctx), expr(rparams[1], ctx), expr(rparams[2], ctx))
                             }
                             rparams.size == 2 -> Wast.IF(expr(rparams[0], ctx), stm(rparams[1], ctx))
-                            rparams.size == 3 -> Wast.IF_ELSE(expr(rparams[0], ctx), stm(rparams[1], ctx), stm(rparams[2], ctx))
+                            rparams.size == 3 -> Wast.IF_ELSE(
+                                expr(rparams[0], ctx),
+                                stm(rparams[1], ctx),
+                                stm(rparams[2], ctx)
+                            )
                             else -> TODO("Unknown if with nparams=$nparams :: $block")
                         }
                     }
@@ -333,19 +443,27 @@ object WastReader {
     fun label(name: String, ctx: BlockBuilderContext): AstLabel {
         return ctx.labels[name] ?: error("Can't find label '$name'")
     }
+
     fun func(name: String, ctx: BlockBuilderContext): WasmFuncRef {
         return WasmFuncName(name) { TODO() }
     }
+
     fun funcType(name: String, ctx: BlockBuilderContext): WasmType.Function {
         return ctx.functionTypes[name] ?: error("Can't find function type '$name'")
     }
+
     fun Block.node(index: Int, ctx: BlockBuilderContext): Wast = this@WastReader.node(this.block(index), ctx)
-    fun Block.expr(index: Int, ctx: BlockBuilderContext): Wast.Expr = this@WastReader.node(this.block(index), ctx) as Wast.Expr
+    fun Block.expr(index: Int, ctx: BlockBuilderContext): Wast.Expr =
+        this@WastReader.node(this.block(index), ctx) as Wast.Expr
+    fun Block.stm(index: Int, ctx: BlockBuilderContext): Wast.Stm =
+        stm(block(index), ctx)
+
     fun Block.label(index: Int, ctx: BlockBuilderContext): AstLabel = label(this.string(index), ctx)
     fun Block.local(index: Int, ctx: BlockBuilderContext): AstLocal {
         val name = this.string(index)
         return ctx.locals[name] ?: error("Can't find local '$name'")
     }
+
     fun Block.global(index: Int, ctx: BlockBuilderContext): AstGlobal {
         val name = this.string(index)
         return ctx.globals[name] ?: error("Can't find global '$name'")

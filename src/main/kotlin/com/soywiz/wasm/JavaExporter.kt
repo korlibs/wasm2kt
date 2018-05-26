@@ -7,9 +7,38 @@ import kotlin.collections.LinkedHashMap
 import kotlin.collections.LinkedHashSet
 import kotlin.math.*
 
-class JavaExporter(val wasm: WasmModule) : BaseJavaExporter() {
-    val module = wasm
+class JavaExporter(val module: WasmModule) : BaseJavaExporter() {
     val moduleCtx = ModuleDumpContext()
+
+    val functionsWithImport = module.functions.filter { it.import != null }
+    val functionsByImport = functionsWithImport.map { it.import!!.importPair to it }.toMap()
+    val handledFunctionsWithImport = LinkedHashSet<WasmFunc>()
+
+    val globalsWithImport = module.globals.filter { it.import != null }
+    val globalsByImport = globalsWithImport.map { it.import!!.importPair to it }.toMap()
+    val handledGlobalsWithImport = LinkedHashSet<Wasm.WasmGlobal>()
+
+    fun getImportFunc(ns: String, name: String): String? {
+        val import = Pair(ns, name)
+        val func = functionsByImport[import]
+        return if (func != null) {
+            handledFunctionsWithImport += func
+            moduleCtx.getName(func)
+        } else {
+            null
+        }
+    }
+
+    fun getImportGlobal(ns: String, name: String): String? {
+        val import = Pair(ns, name)
+        val global = globalsByImport[import]
+        return if (global != null) {
+            handledGlobalsWithImport += global
+            moduleCtx.getName(global)
+        } else {
+            null
+        }
+    }
 
     override fun dump(): Indenter = Indenter {
         line("public class Module") {
@@ -200,22 +229,35 @@ class JavaExporter(val wasm: WasmModule) : BaseJavaExporter() {
             line("    }")
             line("}")
 
-            line("int _emscripten_memcpy_big(int a, int b, int c) { throw new RuntimeException(); }")
-            line("int enlargeMemory() { throw new RuntimeException(); }")
             line("void __putBytes(int address, byte[] data) { for (int n = 0; n < data.length; n++) heap.put(address + n, data[n]); }")
             line("void __putBytes(int address, String data) { for (int n = 0; n < data.length(); n++) heap.put(address + n, (byte)data.charAt(n)); }")
             line("void __putBytesB64(int address, String... datas) { String out = \"\"; for (int n = 0; n < datas.length; n++) out += datas[n]; __putBytes(address, java.util.Base64.getDecoder().decode(out)); }")
-            line("void _abort() { throw new RuntimeException(\"ABORT \"); }")
+            getImportGlobal("env", "DYNAMICTOP_PTR")?.let { line("int $it = DYNAMICTOP_PTR;") }
+            getImportGlobal("env", "tempDoublePtr")?.let { line("int $it = 0;") }
+            getImportGlobal("env", "ABORT")?.let { line("int $it = 0;") }
+            getImportGlobal("env", "STACKTOP")?.let { line("int $it = STACKTOP;") }
+            getImportGlobal("env", "STACK_MAX")?.let { line("int $it = STACK_MAX;") }
+            getImportGlobal("global", "NaN")?.let { line("double $it = java.lang.Double.NaN;") }
+            getImportGlobal("global", "Infinity")?.let { line("double $it = java.lang.Double.POSITIVE_INFINITY;") }
+            getImportFunc("env", "enlargeMemory")?.let { line("int $it() { throw new RuntimeException(); }") }
+            getImportFunc("env", "abortOnCannotGrowMemory")?.let { line("void $it() { throw new RuntimeException(\"abortOnCannotGrowMemory\"); }") }
+            getImportFunc("env", "abortStackOverflow")?.let { line("void $it(int arg) { throw new RuntimeException(\"abortStackOverflow\"); }") }
+            getImportFunc("env", "_abort")?.let { line("void $it() { throw new RuntimeException(\"ABORT \"); }") }
+            getImportFunc("env", "getTotalMemory")?.let { line("int $it() { return heap.limit(); }") }
+            getImportFunc("env", "nullFunc_ii")?.let { line("int $it(int v) { return 0; }") }
+            getImportFunc("env", "nullFunc_iiii")?.let { line("int $it(int a) { return 0; }") }
+            getImportFunc("env", "___lock")?.let { line("void $it(int addr) {}") }
+            getImportFunc("env", "___unlock")?.let { line("void $it(int addr) {}") }
+            getImportFunc("env", "_emscripten_memcpy_big")?.let { line("int $it(int a, int b, int c) { throw new RuntimeException(); }") }
+            getImportFunc("env", "___setErrNo")?.let { line("void $it(int errno) {}") }
+            getImportFunc("env", "___syscall6")?.let { line("int $it(int syscall, int varargbuf) { throw new RuntimeException(); }") } //    SYS_close: 6,
+            getImportFunc("env", "___syscall54")?.let { line("int $it(int syscall, int varargbuf) { throw new RuntimeException(); }") } //    SYS_ioctl: 54,
+            getImportFunc("env", "___syscall140")?.let { line("int $it(int syscall, int varargbuf) { throw new RuntimeException(); }") } //    SYS__llseek: 140,
+            getImportFunc("env", "___syscall146")?.let { line("int $it(int syscall, int varargbuf) { throw new RuntimeException(); }") } //    SYS_writev: 146,
+
             line("void _abort(int value) { throw new RuntimeException(\"ABORT \" + value); }")
             line("void abort(int value) { throw new RuntimeException(\"ABORT \" + value); }")
             line("void abortStackOverflow(int count) { throw new RuntimeException(\"abortStackOverflow(\$count)\"); }")
-            line("void abortOnCannotGrowMemory() { throw new RuntimeException(\"abortOnCannotGrowMemory\"); }")
-            line("int getTotalMemory() { return heap.limit(); }")
-            line("void ___lock(int addr) {}")
-            line("void ___unlock(int addr) {}")
-            line("void ___setErrNo(int errno) {}")
-            line("int nullFunc_ii(int v) { return 0; }")
-            line("int nullFunc_iiii(int v) { return 0; }")
 
             line("void putBytes(int address, byte[] bytes, int offset, int size) {")
             line("    heap.position(address);")
@@ -277,7 +319,6 @@ class JavaExporter(val wasm: WasmModule) : BaseJavaExporter() {
             line("int Op_f32_ge(float l, float r) { return b2i(l >= r); }")
             line("int Op_f32_convert_u_i32(float v) { return (int)v; } // @TODO: Fixme!")
 
-
             // additional
             line("double Op_f64_abs(double v) { return java.lang.Math.abs(v); }")
             line("int Op_i32_trunc_s_f32(float v) { return (int)v; }")
@@ -290,10 +331,13 @@ class JavaExporter(val wasm: WasmModule) : BaseJavaExporter() {
                 line("int _time(int addr) { int time = (int)(System.currentTimeMillis() / 1000L); if (addr != 0) sw(addr, time); return time; }")
             }
 
+            for (func in functionsWithImport - handledFunctionsWithImport) {
+                println("Un-imported function ${func.import}")
+            }
 
             val indices = LinkedHashMap<Int, String>()
-            for (data in wasm.datas) {
-                val ast = data.e.toAst(wasm, WasmFunc(-1, Wasm.INT_FUNC_TYPE))
+            for (data in module.datas) {
+                val ast = data.toAst(module)
                 if (ast is Wast.RETURN && ast.expr is Wast.Const) {
                     indices[data.index] = "${ast.expr.value}"
                 } else {
@@ -305,15 +349,15 @@ class JavaExporter(val wasm: WasmModule) : BaseJavaExporter() {
             }
             val initBlockSize = 16
             line("public Module()") {
-                for (nn in 0 until wasm.datas.size step initBlockSize) {
+                for (nn in 0 until module.datas.size step initBlockSize) {
                     line("init_$nn();")
                 }
             }
-            for (nn in 0 until wasm.datas.size step initBlockSize) {
+            for (nn in 0 until module.datas.size step initBlockSize) {
                 line("private void init_$nn()") {
                     for (mm in 0 until initBlockSize) {
                         val n = nn + mm
-                        val data = wasm.datas.getOrNull(n) ?: break
+                        val data = module.datas.getOrNull(n) ?: break
                         val base64 = Base64.getEncoder().encodeToString(data.data)
                         val chunks = base64.splitInChunks(32 * 1024).map { "\"$it\"" }
                         line("__putBytesB64(${indices[data.index]}, ${chunks.joinToString(", ")});")
@@ -322,18 +366,20 @@ class JavaExporter(val wasm: WasmModule) : BaseJavaExporter() {
             }
             for (global in module.globals) {
                 if (global.import == null) {
-                    line("private ${global.globalType.type.type()} compute${global.name}()") {
-                        line(
-                            global.e!!.toAst(
-                                wasm,
-                                WasmFunc(
-                                    -1,
-                                    WasmType.Function(listOf(), listOf(global.globalType.type))
-                                )
-                            ).dump(DumpContext(moduleCtx, null)).indenter
-                        )
+                    val computeName = "compute${moduleCtx.getName(global)}"
+                    line("private ${global.globalType.type.type()} $computeName()") {
+                        val getterType = WasmType.Function(listOf(), listOf(global.globalType.type))
+                        val ast: Wast.Stm = when {
+                            global.e != null -> {
+                                global.e.toAst(module, WasmFunc(-1, getterType))
+                            }
+                            global.ast != null -> global.ast
+                            else -> TODO("Both ${global::e.name} and ${global::ast.name} are null")
+                        }
+
+                        line(ast.dump(DumpContext(moduleCtx, null)).indenter)
                     }
-                    line("${global.globalType.type.type()} ${global.name} = compute${global.name}();")
+                    line("${global.globalType.type.type()} ${moduleCtx.getName(global)} = $computeName();")
                 }
             }
 
@@ -377,7 +423,7 @@ class JavaExporter(val wasm: WasmModule) : BaseJavaExporter() {
 
             //println(funcToIdx)
 
-            for ((type, functions) in module.functions.groupBy { it.type }) {
+            for ((type, functions) in module.functions.groupBy { it.type.withoutArgNames() }) {
                 //val funcs = functions.joinToString(", ") { "this::${it.name}" }
                 //line("val functions${type.signature} = arrayOf($funcs)")
                 //val funcType = type.typeName()
@@ -410,12 +456,12 @@ class JavaExporter(val wasm: WasmModule) : BaseJavaExporter() {
     }
 
     fun dump(func: WasmFunc): Indenter = Indenter {
-        val bodyAst = func.getAst(wasm)
+        val bodyAst = func.getAst(module)
         if (bodyAst != null) {
             val visibility = if (func.export != null) "public " else "private "
             val ctx = DumpContext(moduleCtx, func)
             val args = func.type.args.joinToString(", ") { "${it.type.type()} " + ctx.getName(it) + "" }
-            line("$visibility${func.type.retType.type()} ${func.name}($args)") {
+            line("$visibility${func.type.retType.type()} ${moduleCtx.getName(func)}($args)") {
                 //for ((index, local) in func.rlocals.withIndex()) {
                 //    val value = if (index < func.type.args.size) "p$index" else local.default()
                 //    line("${local.type()} l$index = $value;")
@@ -443,6 +489,13 @@ open class BaseJavaExporter : Exporter {
         val PHI_NAMES = setOf("phi_i32", "phi_i64", "phi_f32", "phi_f64")
         val RESERVED_LOCALS = setOf("index")
         val JAVA_DEFINED_NAMES: Set<String> = JAVA_KEYWORDS + PHI_NAMES + RESERVED_LOCALS
+
+        fun JavaNameAllocator() = NameAllocator {
+            //var res = it.replace('$', '_').replace('-', '_')
+            var res = it.replace('-', '_')
+            while (res in Companion.JAVA_DEFINED_NAMES) res = "_$res"
+            res
+        }
     }
     override fun dump(): Indenter {
         TODO()
@@ -485,29 +538,23 @@ open class BaseJavaExporter : Exporter {
         }
     }
 
-    class ModuleDumpContext() {
-        val usedNames = NameAllocator {
-            var res = it.replace('$', '_').replace('-', '_')
-            while (res in JAVA_DEFINED_NAMES) res = "_$res"
-            res
-        }
-        val globalNames = LinkedHashMap<AstGlobal, String>()
-        val functionNames = LinkedHashMap<WasmFunc, String>()
 
-        fun getName(func: WasmFunc): String = functionNames.getOrPut(func) { usedNames.allocate(func.name) }
+    class ModuleDumpContext() {
+        private val usedNames = JavaNameAllocator()
+        private val globalNames = LinkedHashMap<AstGlobal, String>()
+        private val functionNames = LinkedHashMap<String, String>()
+
+        fun getName(func: WasmFuncRef): String = functionNames.getOrPut(func.name) { usedNames.allocate(func.name) }
+        //fun getName(func: WasmFunc): String = getName(func.ftype)
         fun getName(global: AstGlobal): String = globalNames.getOrPut(global) { usedNames.allocate(global.name) }
+        fun getName(global: Wasm.WasmGlobal): String = getName(global.astGlobal)
     }
 
     class DumpContext(val moduleCtx: ModuleDumpContext, val func: WasmFunc?) {
         val phiTypes = LinkedHashSet<WasmType>()
         val debug get() = false
         //val debug get() = func?.name == "_memset"
-        val usedNames = NameAllocator {
-            //var res = it.replace('$', '_').replace('-', '_')
-            var res = it.replace('-', '_')
-            while (res in JAVA_DEFINED_NAMES) res = "_$res"
-            res
-        }
+        val usedNames = JavaNameAllocator()
         val localNames = LinkedHashMap<AstLocal, String>()
         val labelNames = LinkedHashMap<AstLabel, String>()
 
@@ -535,7 +582,7 @@ open class BaseJavaExporter : Exporter {
                 }
             }
             is Wast.SetLocal -> out.line("${ctx.getName(local)} = ${this.expr.dump(ctx)};")
-            is Wast.SetGlobal -> out.line("${ctx.getName(global)} = ${this.expr.dump(ctx)};")
+            is Wast.SetGlobal -> out.line("this.${ctx.getName(global)} = ${this.expr.dump(ctx)};")
             is Wast.RETURN -> {
                 out.line("return ${this.expr.dump(ctx)};")
                 unreachable = true
@@ -642,7 +689,7 @@ open class BaseJavaExporter : Exporter {
                 else -> "(${this.value})"
             }
             is Wast.Local -> ctx.getName(local)
-            is Wast.Global -> ctx.getName(global)
+            is Wast.Global -> "this." + ctx.getName(global)
             is Wast.Unop -> {
                 //"(" + " ${this.op.symbol} " + this.expr.dump() + ")"
                 "$op(${this.expr.dump(ctx)})"
@@ -661,8 +708,7 @@ open class BaseJavaExporter : Exporter {
                 }
             }
             is Wast.CALL -> {
-                val name = if (this.func.name.startsWith("___syscall")) "___syscall" else this.func.name
-                "$name(${this.args.map { it.dump(ctx) }.joinToString(", ")})"
+                "this.${ctx.moduleCtx.getName(func)}(${this.args.joinToString(", ") { it.dump(ctx) }})"
             }
         //is A.CALL_INDIRECT -> "((Op_getFunction(${this.address.dump()}) as (${this.type.type()}))" + "(" + this.args.map { it.dump() }.joinToString(
             is Wast.CALL_INDIRECT -> "(invoke_${this.type.signature}(${this.address.dump(ctx)}, " + this.args.map { it.dump(ctx) }.joinToString(

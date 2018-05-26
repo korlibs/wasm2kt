@@ -14,7 +14,7 @@ class WasmModule(
     val functions: List<WasmFunc>,
     val datas: List<Wasm.Data>,
     val types: List<WasmType>,
-    val globals: List<Wasm.Global>,
+    val globals: List<Wasm.WasmGlobal>,
     val elements: List<Wasm.Element>
 ) {
     val globalsByIndex = globals.associateBy { it.index }
@@ -98,7 +98,7 @@ class Wasm {
 
     var types = listOf<WasmType>(); private set
     var functions = LinkedHashMap<Int, WasmFunc>(); private set
-    var globals = LinkedHashMap<Int, Global>(); private set
+    var globals = LinkedHashMap<Int, WasmGlobal>(); private set
     var elements = listOf<Element>(); private set
     var imports = listOf<Import>(); private set
     var exports = listOf<Export>(); private set
@@ -154,19 +154,32 @@ class Wasm {
         }
     }
 
-    data class Data(val x: Int, val e: Expr, val data: ByteArray, val index: Int)
+    data class Data(
+        val memindex: Int,
+        val data: ByteArray,
+        val index: Int,
+        val e: Expr? = null,
+        val ast: Wast.Expr? = null
+    ) {
+        fun toAst(module: WasmModule): Wast.Stm = when {
+            e != null -> e.toAst(module, WasmFunc(-1, Wasm.INT_FUNC_TYPE))
+            ast != null -> Wast.RETURN(ast)
+            else -> TODO()
+        }
+    }
 
     fun SyncStream.readData(index: Int): Data {
         val memindex = readLEB128()
         val expr = readExpr()
         val data = readBytesExact(readLEB128())
-        return Data(memindex, expr, data, index)
+        return Data(
+            memindex = memindex, data = data, index = index, e = expr)
     }
 
     fun SyncStream.readDataSection() {
         datas = readVec { readData(it) }
         for ((index, data) in datas.withIndex()) {
-            trace("// DATA[$index]: ${data.data.size}: ${data.x}, ${data.e}")
+            trace("// DATA[$index]: ${data.data.size}: ${data.memindex}, ${data.e}")
         }
     }
 
@@ -257,7 +270,9 @@ class Wasm {
         return WasmType.Global(t, mut != 0)
     }
 
-    data class Import(val moduleName: String, val name: String, val indexSpace: Int, val index: Int, val type: Any)
+    data class Import(val moduleName: String, val name: String, val indexSpace: Int, val index: Int, val type: Any) {
+        val importPair = Pair(moduleName, name)
+    }
 
     val INDEX_FUNCTIONS = 0
     val INDEX_TABLES = 1
@@ -285,7 +300,7 @@ class Wasm {
         when (indexSpace) {
             INDEX_FUNCTIONS -> functions[index] =
                     WasmFunc(index, type as WasmType.Function, code = null, import = import)
-            INDEX_GLOBALS -> globals[index] = Global(type as WasmType.Global, index, e = null, import = import)
+            INDEX_GLOBALS -> globals[index] = WasmGlobal(type as WasmType.Global, index, e = null, import = import)
         }
         //println("$nm::$name = $type")
         return import
@@ -357,20 +372,23 @@ class Wasm {
         }
     }
 
-    data class Global(
+    data class WasmGlobal(
         val globalType: WasmType.Global,
-        val index: Int,
+        val index: Int = -1,
         val e: Expr? = null,
-        var import: Import? = null
+        val ast: Wast.Stm? = null,
+        var import: Import? = null,
+        val name: String = import?.name ?: "g$index"
     ) {
-        val name get() = import?.name ?: "g$index"
+        val astGlobal = AstGlobal(name, globalType.type)
+        //val name get() = import?.name ?: "g$index"
     }
 
-    fun SyncStream.readGlobal(): Global {
+    fun SyncStream.readGlobal(): WasmGlobal {
         val gt = readGlobalType()
         val e = readExpr()
         trace("// GLOBAL: $gt, $e")
-        return Global(gt, indicesInTables[INDEX_GLOBALS]++, e)
+        return WasmGlobal(gt, indicesInTables[INDEX_GLOBALS]++, e)
     }
 
 

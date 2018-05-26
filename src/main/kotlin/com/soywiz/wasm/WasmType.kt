@@ -39,12 +39,20 @@ interface WasmType {
         override val signature: String = "l$min$max"
     }
 
-    data class Function(val args: List<AstLocal>, val ret: List<WasmType>) : WasmType {
+    data class Function(val args: List<AstLocal>, val rets: List<WasmType>) : WasmType {
         override val id = -1
-        val retType get() = ret.firstOrNull() ?: WasmType.void
+        init {
+            check(rets.size <= 1) { "Multiple return values are not supported" }
+        }
+        val retType get() = rets.firstOrNull() ?: WasmType.void
         val retTypeVoid get() = retType == WasmType.void
-        val argsPlusRet get() = args.map { it.type } + listOf(retType)
+        val argsPlusRet: List<WasmType> get() = args.map { it.type } + listOf(retType)
         override val signature: String get() = argsPlusRet.joinToString("") { it.signature }
+
+        fun withoutArgNames(): Function = Function(
+            args = args.withIndex().map { AstLocal(it.index, it.value.type) },
+            rets = rets
+        )
     }
 
     data class Global(val type: WasmType, val mutable: Boolean) : WasmType {

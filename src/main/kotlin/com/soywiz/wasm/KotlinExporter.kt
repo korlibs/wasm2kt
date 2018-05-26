@@ -27,7 +27,8 @@ class KotlinExporter(val wasm: WasmModule) : Exporter {
             }
             val indices = LinkedHashMap<Int, String>()
             for (data in wasm.datas) {
-                val ast = data.e.toAst(wasm, WasmFunc(-1, Wasm.INT_FUNC_TYPE))
+                TODO()
+                val ast = data.e!!.toAst(wasm, WasmFunc(-1, Wasm.INT_FUNC_TYPE))
                 if (ast is Wast.RETURN && ast.expr is Wast.Const) {
                     indices[data.index] = "${ast.expr.value}"
                 } else {
