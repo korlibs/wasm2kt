@@ -1,12 +1,14 @@
 package com.soywiz.wasm.exporter
 
-import com.soywiz.korio.error.*
 import com.soywiz.wasm.*
 
 /**
  * @TODO: Create a BaseExporter, so Java and Kotlin exporters can reuse code
  */
-class KotlinExporter(val wasm: WasmModule) : Exporter {
+class KotlinExporter(module: WasmModule) : Exporter(module) {
+    override fun writeSetLocal(localName: String, expr: String) = Indenter { line("$localName = $expr") }
+    override fun writeSetGlobal(globalName: String, expr: String) = Indenter { line("this.$globalName = $expr") }
+    /*
     val module = wasm
     override fun dump(config: ExportConfig): Indenter =
         Indenter {
@@ -237,4 +239,5 @@ class KotlinExporter(val wasm: WasmModule) : Exporter {
         }
         return out
     }
+    */
 }

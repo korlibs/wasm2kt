@@ -74,7 +74,11 @@ class Wasm {
                     file = arg
                 }
             }
-            if (showHelp || file == null) error("wasm2kt [-lang java|kotlin] [-class Module] [-package my.java.package] <file.wasm|wast>")
+            if (showHelp || file == null) {
+                System.err.println("wasm2kt [-lang java|kotlin] [-class Module] [-package my.java.package] <file.wasm|file.wast>")
+                System.exit(0)
+                error("unreachable")
+            }
             val fileContents = file.uniVfs.readAll()
 
             val module = when {
