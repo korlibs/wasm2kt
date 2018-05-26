@@ -17,7 +17,9 @@ class IntegrationTest : BaseIntegrationTest() {
                 printf("\n");
                 return 0;
             }
-            """
+            """,
+            //optimization = 0
+            optimization = 3
         )
     }
 

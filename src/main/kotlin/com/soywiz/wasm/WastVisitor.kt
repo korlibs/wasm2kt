@@ -19,6 +19,7 @@ open class WastVisitor {
         when (a) {
             is Wast.Const -> visit(a)
             is Wast.Local -> visit(a)
+            is Wast.TeeLocal -> visit(a)
             is Wast.Global -> visit(a)
             is Wast.InvalidExpr -> visit(a)
             is Wast.Unop -> visit(a)
@@ -28,6 +29,7 @@ open class WastVisitor {
             is Wast.CALL_INDIRECT -> visit(a)
             is Wast.ReadMemory -> visit(a)
             is Wast.Phi -> visit(a)
+            is Wast.BLOCK_EXPR -> visit(a)
             else -> TODO("$a")
         }
     }
@@ -37,6 +39,11 @@ open class WastVisitor {
 
     open fun visit(a: Wast.Local) {
         visit(a.local)
+    }
+
+    open fun visit(a: Wast.TeeLocal) {
+        visit(a.local)
+        visit(a.expr)
     }
 
     open fun visit(a: Wast.Global) {
@@ -105,6 +112,10 @@ open class WastVisitor {
     }
 
     open fun visit(a: Wast.BLOCK) {
+        visit(a.stm)
+    }
+
+    open fun visit(a: Wast.BLOCK_EXPR) {
         visit(a.stm)
     }
 

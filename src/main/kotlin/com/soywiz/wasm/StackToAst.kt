@@ -232,7 +232,7 @@ fun Wasm.Expr.toAst2(
                         ?: com.soywiz.korio.error.invalidOp("Can't find function ${i.funcIdx}")
                 //println("CALL $func")
                 val nargs = func.type.args.count()
-                stackPush(Wast.CALL(func, (0 until nargs).map { stackPop() }.reversed()))
+                stackPush(Wast.CALL(func.fwt, (0 until nargs).map { stackPop() }.reversed()))
                 if (func.type.retTypeVoid) {
                     addStm(Wast.STM_EXPR(stackPop()))
                 }
@@ -309,6 +309,8 @@ fun Wasm.Expr.toAst2(
 
 data class AstLocal(val name: String, val type: WasmType, val index: Int = -1) {
     constructor(index: Int, type: WasmType) : this("l$index", type, index)
+
+    override fun toString(): String = "$name: $type"
 }
 
 data class AstGlobal(val name: String, val type: WasmType) {

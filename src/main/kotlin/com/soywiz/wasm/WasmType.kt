@@ -53,6 +53,8 @@ interface WasmType {
             args = args.withIndex().map { AstLocal(it.index, it.value.type) },
             rets = rets
         )
+
+        override fun toString(): String = "(${args.joinToString(", ")}): $retType"
     }
 
     data class Global(val type: WasmType, val mutable: Boolean) : WasmType {

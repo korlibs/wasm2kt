@@ -60,17 +60,6 @@ class JavaExporter(val module: WasmModule) : BaseJavaExporter() {
 
             line("public java.nio.ByteBuffer heap = java.nio.ByteBuffer.allocate(heapSize).order(java.nio.ByteOrder.nativeOrder());")
 
-            line("private int ABORT = -1;")
-            line("private int DYNAMICTOP_PTR = 0;")
-            line("private int STACK_INITIAL_SIZE = stackSize;")
-            line("private int STACK_MAX = heap.limit();")
-            line("private int STACKTOP = STACK_MAX - STACK_INITIAL_SIZE;")
-            line("private int allocStack(int count) {  STACKTOP -= count; return STACKTOP; }")
-            line("private int tempDoublePtr = allocStack(1024);")
-
-            line("private double NaN = Double.NaN;")
-            line("private double Infinity = Double.POSITIVE_INFINITY;")
-
             // https://webassembly.github.io/spec/core/exec/numerics.html
             line("int Op_i32_add(int l, int r) { return l + r; }")
             line("int Op_i32_sub(int l, int r) { return l - r; }")
@@ -126,41 +115,40 @@ class JavaExporter(val module: WasmModule) : BaseJavaExporter() {
             line("    return (int)v;")
             line("}")
 
-            line("int b2i(boolean v)                { return v ? 1 : 0; }")
-            line("int Op_i32_wrap_i64(long v)       { return (int)(v & 0xFFFFFFFFL); }")
-            line("long Op_i64_extend_s_i32(int v)   { return (long)v; }")
-            line("long Op_i64_extend_u_i32(int v)   { return (long)v & 0xFFFFFFFFL; }")
-            line("int Op_i32_eqz(int l)             { return b2i(l == 0); }")
-            line("int Op_i32_eq(int l, int r      ) { return b2i(l == r); }")
-            line("int Op_i32_ne(int l, int r      ) { return b2i(l != r); }")
-            line("int Op_i32_lt_u(int l, int r    ) { return b2i(java.lang.Integer.compareUnsigned(l, r) < 0); }")
-            line("int Op_i32_gt_u(int l, int r    ) { return b2i(java.lang.Integer.compareUnsigned(l, r) > 0); }")
-            line("int Op_i32_le_u(int l, int r    ) { return b2i(java.lang.Integer.compareUnsigned(l, r) <= 0); }")
-            line("int Op_i32_ge_u(int l, int r    ) { return b2i(java.lang.Integer.compareUnsigned(l, r) >= 0); }")
-            line("int Op_i32_lt_s(int l, int r    ) { return b2i(l < r); }")
-            line("int Op_i32_le_s(int l, int r    ) { return b2i(l <= r); }")
-            line("int Op_i32_gt_s(int l, int r    ) { return b2i(l > r); }")
-            line("int Op_i32_ge_s(int l, int r    ) { return b2i(l >= r); }")
+            line("private int b2i(boolean v)                { return v ? 1 : 0; }")
+            line("private int Op_i32_wrap_i64(long v)       { return (int)(v & 0xFFFFFFFFL); }")
+            line("private long Op_i64_extend_s_i32(int v)   { return (long)v; }")
+            line("private long Op_i64_extend_u_i32(int v)   { return (long)v & 0xFFFFFFFFL; }")
+            line("private int Op_i32_eqz(int l)             { return b2i(l == 0); }")
+            line("private int Op_i32_eq(int l, int r      ) { return b2i(l == r); }")
+            line("private int Op_i32_ne(int l, int r      ) { return b2i(l != r); }")
+            line("private int Op_i32_lt_u(int l, int r    ) { return b2i(java.lang.Integer.compareUnsigned(l, r) < 0); }")
+            line("private int Op_i32_gt_u(int l, int r    ) { return b2i(java.lang.Integer.compareUnsigned(l, r) > 0); }")
+            line("private int Op_i32_le_u(int l, int r    ) { return b2i(java.lang.Integer.compareUnsigned(l, r) <= 0); }")
+            line("private int Op_i32_ge_u(int l, int r    ) { return b2i(java.lang.Integer.compareUnsigned(l, r) >= 0); }")
+            line("private int Op_i32_lt_s(int l, int r    ) { return b2i(l < r); }")
+            line("private int Op_i32_le_s(int l, int r    ) { return b2i(l <= r); }")
+            line("private int Op_i32_gt_s(int l, int r    ) { return b2i(l > r); }")
+            line("private int Op_i32_ge_s(int l, int r    ) { return b2i(l >= r); }")
+            line("private int Op_i64_eqz (long l          ) { return b2i(l == 0L); }")
+            line("private int Op_i64_eq  (long l, long r  ) { return b2i(l == r); }")
+            line("private int Op_i64_ne  (long l, long r  ) { return b2i(l != r); }")
+            line("private int Op_i64_lt_u(long l, long r  ) { return b2i(java.lang.Long.compareUnsigned(l, r) < 0); }")
+            line("private int Op_i64_gt_u(long l, long r  ) { return b2i(java.lang.Long.compareUnsigned(l, r) > 0); }")
+            line("private int Op_i64_le_u(long l, long r  ) { return b2i(java.lang.Long.compareUnsigned(l, r) <= 0); }")
+            line("private int Op_i64_ge_u(long l, long r  ) { return b2i(java.lang.Long.compareUnsigned(l, r) >= 0); }")
+            line("private int Op_i64_lt_s(long l, long r  ) { return b2i(l < r); }")
+            line("private int Op_i64_le_s(long l, long r  ) { return b2i(l <= r); }")
+            line("private int Op_i64_gt_s(long l, long r  ) { return b2i(l > r); }")
+            line("private int Op_i64_ge_s(long l, long r  ) { return b2i(l >= r); }")
+            line("private int Op_f64_eq(double l, double r) { return b2i(l == r); }")
+            line("private int Op_f64_ne(double l, double r) { return b2i(l != r); }")
+            line("private int Op_f64_lt(double l, double r) { return b2i(l < r); }")
+            line("private int Op_f64_le(double l, double r) { return b2i(l <= r); }")
+            line("private int Op_f64_gt(double l, double r) { return b2i(l > r); }")
+            line("private int Op_f64_ge(double l, double r) { return b2i(l >= r); }")
 
-            line("int Op_i64_eqz (long l          ) { return b2i(l == 0L); }")
-            line("int Op_i64_eq  (long l, long r  ) { return b2i(l == r); }")
-            line("int Op_i64_ne  (long l, long r  ) { return b2i(l != r); }")
-            line("int Op_i64_lt_u(long l, long r  ) { return b2i(java.lang.Long.compareUnsigned(l, r) < 0); }")
-            line("int Op_i64_gt_u(long l, long r  ) { return b2i(java.lang.Long.compareUnsigned(l, r) > 0); }")
-            line("int Op_i64_le_u(long l, long r  ) { return b2i(java.lang.Long.compareUnsigned(l, r) <= 0); }")
-            line("int Op_i64_ge_u(long l, long r  ) { return b2i(java.lang.Long.compareUnsigned(l, r) >= 0); }")
-            line("int Op_i64_lt_s(long l, long r  ) { return b2i(l < r); }")
-            line("int Op_i64_le_s(long l, long r  ) { return b2i(l <= r); }")
-            line("int Op_i64_gt_s(long l, long r  ) { return b2i(l > r); }")
-            line("int Op_i64_ge_s(long l, long r  ) { return b2i(l >= r); }")
-            line("int Op_f64_eq(double l, double r) { return b2i(l == r); }")
-            line("int Op_f64_ne(double l, double r) { return b2i(l != r); }")
-            line("int Op_f64_lt(double l, double r) { return b2i(l < r); }")
-            line("int Op_f64_le(double l, double r) { return b2i(l <= r); }")
-            line("int Op_f64_gt(double l, double r) { return b2i(l > r); }")
-            line("int Op_f64_ge(double l, double r) { return b2i(l >= r); }")
-
-            line("int checkAddress(int address, int offset) {")
+            line("private int checkAddress(int address, int offset) {")
             line("    int raddress = address + offset;")
             line("    if (raddress < 0 || raddress >= heap.limit() - 4) {")
             line("        System.out.printf(\"ADDRESS: %d (%d + %d)\\n\", raddress, address, offset);")
@@ -168,36 +156,36 @@ class JavaExporter(val module: WasmModule) : BaseJavaExporter() {
             line("    return raddress;")
             line("}")
             line("")
-            line("float Op_f32_load(int address, int offset, int align) { return heap.getFloat(checkAddress(address, offset)); }")
-            line("double Op_f64_load(int address, int offset, int align) { return heap.getDouble(checkAddress(address, offset)); }")
-            line("long Op_i64_load(int address, int offset, int align) { return heap.getLong(checkAddress(address, offset)); }")
-            line("int Op_i32_load(int address, int offset, int align) { return heap.getInt(checkAddress(address, offset)); }")
-            line("int Op_i32_load8_s(int address, int offset, int align) {")
+            line("private float Op_f32_load(int address, int offset, int align) { return heap.getFloat(checkAddress(address, offset)); }")
+            line("private double Op_f64_load(int address, int offset, int align) { return heap.getDouble(checkAddress(address, offset)); }")
+            line("private long Op_i64_load(int address, int offset, int align) { return heap.getLong(checkAddress(address, offset)); }")
+            line("private int Op_i32_load(int address, int offset, int align) { return heap.getInt(checkAddress(address, offset)); }")
+            line("private int Op_i32_load8_s(int address, int offset, int align) {")
             line("    int raddr = checkAddress(address, offset);")
             line("    int value = (int)heap.get(raddr);")
             line("    return value;")
             line("}")
 
-            line("int Op_i32_load8_u(int address, int offset, int align) { return Op_i32_load8_s(address, offset, align) & 0xFF; }")
+            line("private int Op_i32_load8_u(int address, int offset, int align) { return Op_i32_load8_s(address, offset, align) & 0xFF; }")
 
-            line("void Op_f32_store(int address, int offset, int align, float value) { heap.putFloat(checkAddress(address, offset), value); }")
-            line("void Op_f64_store(int address, int offset, int align, double value) { heap.putDouble(checkAddress(address, offset), value); }")
-            line("void Op_i64_store(int address, int offset, int align, long value) { heap.putLong(checkAddress(address, offset), value); }")
-            line("void Op_i32_store(int address, int offset, int align, int value) { heap.putInt(checkAddress(address, offset), value); }")
-            line("void Op_i32_store8(int address, int offset, int align, int value) { heap.put(checkAddress(address, offset), (byte)value); }")
-            line("void Op_i32_store16(int address, int offset, int align, int value) { heap.putShort(checkAddress(address, offset), (short)value); }")
-            line("void Op_i64_store8(int address, int offset, int align, long value) { Op_i32_store8(address, offset, align, (int)value); }")
-            line("void Op_i64_store16(int address, int offset, int align, long value) { Op_i32_store16(address, offset, align, (int)value); }")
-            line("void Op_i64_store32(int address, int offset, int align, long value) { Op_i32_store(address, offset, align, (int)value); }")
-            line("void sb(int address, int value) { Op_i32_store8(address, 0, 0, value); }")
-            line("void sh(int address, int value) { Op_i32_store16(address, 0, 1, value); }")
-            line("void sw(int address, int value) { Op_i32_store(address, 0, 2, value); }")
-            line("int lw(int address) { return Op_i32_load(address, 0, 2); }")
-            line("int lb(int address) { return Op_i32_load8_s(address, 0, 0); }")
-            line("int lbu(int address) { return Op_i32_load8_u(address, 0, 0); }")
+            line("private void Op_f32_store(int address, int offset, int align, float value) { heap.putFloat(checkAddress(address, offset), value); }")
+            line("private void Op_f64_store(int address, int offset, int align, double value) { heap.putDouble(checkAddress(address, offset), value); }")
+            line("private void Op_i64_store(int address, int offset, int align, long value) { heap.putLong(checkAddress(address, offset), value); }")
+            line("private void Op_i32_store(int address, int offset, int align, int value) { heap.putInt(checkAddress(address, offset), value); }")
+            line("private void Op_i32_store8(int address, int offset, int align, int value) { heap.put(checkAddress(address, offset), (byte)value); }")
+            line("private void Op_i32_store16(int address, int offset, int align, int value) { heap.putShort(checkAddress(address, offset), (short)value); }")
+            line("private void Op_i64_store8(int address, int offset, int align, long value) { Op_i32_store8(address, offset, align, (int)value); }")
+            line("private void Op_i64_store16(int address, int offset, int align, long value) { Op_i32_store16(address, offset, align, (int)value); }")
+            line("private void Op_i64_store32(int address, int offset, int align, long value) { Op_i32_store(address, offset, align, (int)value); }")
+            line("private void sb(int address, int value) { Op_i32_store8(address, 0, 0, value); }")
+            line("private void sh(int address, int value) { Op_i32_store16(address, 0, 1, value); }")
+            line("private void sw(int address, int value) { Op_i32_store(address, 0, 2, value); }")
+            line("private int lw(int address) { return Op_i32_load(address, 0, 2); }")
+            line("private int lb(int address) { return Op_i32_load8_s(address, 0, 0); }")
+            line("private int lbu(int address) { return Op_i32_load8_u(address, 0, 0); }")
             //line("int ___syscall(int syscall, int address) { throw new RuntimeException(\"syscall \" + syscall); }")
 
-            line("int ___syscall(int syscall, int address) {")
+            line("private int ___syscall(int syscall, int address) {")
             line("    switch (syscall) {")
             line("        case 54: {")
             line("            int fd = lw(address + 0);")
@@ -233,33 +221,42 @@ class JavaExporter(val module: WasmModule) : BaseJavaExporter() {
             line("void __putBytes(int address, byte[] data) { for (int n = 0; n < data.length; n++) heap.put(address + n, data[n]); }")
             line("void __putBytes(int address, String data) { for (int n = 0; n < data.length(); n++) heap.put(address + n, (byte)data.charAt(n)); }")
             line("void __putBytesB64(int address, String... datas) { String out = \"\"; for (int n = 0; n < datas.length; n++) out += datas[n]; __putBytes(address, java.util.Base64.getDecoder().decode(out)); }")
-            getImportGlobal("env", "DYNAMICTOP_PTR")?.let { line("int $it = DYNAMICTOP_PTR;") }
-            getImportGlobal("env", "tempDoublePtr")?.let { line("int $it = 0;") }
+
+            line("private int STACK_INITIAL_SIZE = stackSize;")
+            val STACKTOP = getImportGlobal("env", "STACKTOP")
+            line("private int allocStack(int count) { $STACKTOP -= count; return $STACKTOP; }")
+
+            getImportGlobal("env", "DYNAMICTOP_PTR")?.let { line("int $it = 0;") }
+            getImportGlobal("env", "tempDoublePtr")?.let { line("int $it = allocStack(1024);") }
             getImportGlobal("env", "tableBase")?.let { line("int $it = 0;") }
-            getImportGlobal("env", "ABORT")?.let { line("int $it = 0;") }
-            getImportGlobal("env", "STACKTOP")?.let { line("int $it = STACKTOP;") }
-            getImportGlobal("env", "STACK_MAX")?.let { line("int $it = STACK_MAX;") }
+            getImportGlobal("env", "ABORT")?.let { line("int $it = -1;") }
+            getImportGlobal("env", "STACK_MAX")?.let { line("int $it = heap.limit();") }
+            getImportGlobal("env", "STACKTOP")?.let { line("int $it = heap.limit() - STACK_INITIAL_SIZE;") }
             getImportGlobal("global", "NaN")?.let { line("double $it = java.lang.Double.NaN;") }
             getImportGlobal("global", "Infinity")?.let { line("double $it = java.lang.Double.POSITIVE_INFINITY;") }
+
+            getImportFunc("env", "getTotalMemory")?.let { line("int $it() { return heap.limit(); }") }
             getImportFunc("env", "enlargeMemory")?.let { line("int $it() { throw new RuntimeException(); }") }
             getImportFunc("env", "abortOnCannotGrowMemory")?.let { line("void $it() { throw new RuntimeException(\"abortOnCannotGrowMemory\"); }") }
+
             getImportFunc("env", "abortStackOverflow")?.let { line("void $it(int arg) { throw new RuntimeException(\"abortStackOverflow\"); }") }
-            getImportFunc("env", "_abort")?.let { line("void $it() { throw new RuntimeException(\"ABORT \"); }") }
-            getImportFunc("env", "getTotalMemory")?.let { line("int $it() { return heap.limit(); }") }
+
+            getImportFunc("env", "abort")?.let { line("void $it(int v) { throw new RuntimeException(\"ABORT \" + v); }") }
+            getImportFunc("env", "_abort")?.let { line("void $it() { throw new RuntimeException(\"ABORT\"); }") }
+
             getImportFunc("env", "nullFunc_ii")?.let { line("int $it(int v) { return 0; }") }
             getImportFunc("env", "nullFunc_iiii")?.let { line("int $it(int a) { return 0; }") }
+
             getImportFunc("env", "___lock")?.let { line("void $it(int addr) {}") }
             getImportFunc("env", "___unlock")?.let { line("void $it(int addr) {}") }
+
             getImportFunc("env", "_emscripten_memcpy_big")?.let { line("int $it(int a, int b, int c) { throw new RuntimeException(); }") }
             getImportFunc("env", "___setErrNo")?.let { line("void $it(int errno) {}") }
-            getImportFunc("env", "___syscall6")?.let { line("int $it(int syscall, int varargbuf) { throw new RuntimeException(); }") } //    SYS_close: 6,
-            getImportFunc("env", "___syscall54")?.let { line("int $it(int syscall, int varargbuf) { throw new RuntimeException(); }") } //    SYS_ioctl: 54,
-            getImportFunc("env", "___syscall140")?.let { line("int $it(int syscall, int varargbuf) { throw new RuntimeException(); }") } //    SYS__llseek: 140,
-            getImportFunc("env", "___syscall146")?.let { line("int $it(int syscall, int varargbuf) { throw new RuntimeException(); }") } //    SYS_writev: 146,
-
-            line("void _abort(int value) { throw new RuntimeException(\"ABORT \" + value); }")
-            line("void abort(int value) { throw new RuntimeException(\"ABORT \" + value); }")
-            line("void abortStackOverflow(int count) { throw new RuntimeException(\"abortStackOverflow(\$count)\"); }")
+            getImportFunc("env", "___syscall6")?.let { line("int $it(int syscall, int address) { return ___syscall(6, address); }") } //    SYS_close: 6,
+            getImportFunc("env", "___syscall54")?.let { line("int $it(int syscall, int address) { return ___syscall(54, address); }") } //    SYS_ioctl: 54,
+            getImportFunc("env", "___syscall140")?.let { line("int $it(int syscall, int address) { return ___syscall(140, address); }") } //    SYS__llseek: 140,
+            getImportFunc("env", "___syscall146")?.let { line("int $it(int syscall, int address) { return ___syscall(146, address); }") } //    SYS_writev: 146,
+            getImportFunc("env", "_time")?.let { line("int $it(int addr) { int time = (int)(System.currentTimeMillis() / 1000L); if (addr != 0) sw(addr, time); return time; }") }
 
             line("void putBytes(int address, byte[] bytes, int offset, int size) {")
             line("    heap.position(address);")
@@ -327,11 +324,6 @@ class JavaExporter(val module: WasmModule) : BaseJavaExporter() {
 
             line("float Op_f32_convert_s_i32(int v) { return (float)v; }")
 
-            // stdlib
-            val importedFunctions = module.functions.map { it.name }.toSet()
-            if ("_time" in importedFunctions) {
-                line("int _time(int addr) { int time = (int)(System.currentTimeMillis() / 1000L); if (addr != 0) sw(addr, time); return time; }")
-            }
 
             for (func in functionsWithImport - handledFunctionsWithImport) {
                 println("Un-imported function ${func.import}")
@@ -339,6 +331,7 @@ class JavaExporter(val module: WasmModule) : BaseJavaExporter() {
 
             val indices = LinkedHashMap<Int, String>()
             for (data in module.datas) {
+                //println("DATA: $data")
                 val ast = data.toAst(module)
                 if (ast is Wast.RETURN && ast.expr is Wast.Const) {
                     indices[data.index] = "${ast.expr.value}"
@@ -547,6 +540,7 @@ open class BaseJavaExporter : Exporter {
         private val functionNames = LinkedHashMap<String, String>()
 
         fun getName(func: WasmFuncRef): String = functionNames.getOrPut(func.name) { usedNames.allocate(func.name) }
+        fun getName(func: WasmFuncWithType): String = functionNames.getOrPut(func.name) { usedNames.allocate(func.name) }
         //fun getName(func: WasmFunc): String = getName(func.ftype)
         fun getName(global: AstGlobal): String = globalNames.getOrPut(global) { usedNames.allocate(global.name) }
         fun getName(global: Wasm.WasmGlobal): String = getName(global.astGlobal)
@@ -690,6 +684,7 @@ open class BaseJavaExporter : Exporter {
                 WasmType.i64 -> "(${this.value}L)"
                 else -> "(${this.value})"
             }
+            is Wast.TeeLocal -> "(${ctx.getName(local)} = ${this.expr.dump(ctx)})"
             is Wast.Local -> ctx.getName(local)
             is Wast.Global -> "this." + ctx.getName(global)
             is Wast.Unop -> {

@@ -15,9 +15,7 @@ data class WasmFuncName(override val name: String, val resolve: (name: String) -
     override val func get() = resolve(name)
 }
 
-data class WasmFuncWithType(override val name: String, val type: WasmType.Function, val resolve: (name: String) -> WasmFunc) : WasmFuncRef {
-    override val func get() = resolve(name)
-}
+data class WasmFuncWithType(val name: String, val type: WasmType.Function)
 
 data class WasmFunc(
     val index: Int,
@@ -44,4 +42,5 @@ data class WasmFunc(
     override val name: String by lazy { name2 ?: import?.name ?: export?.name ?: "f$index" }
 
     val ftype: FuncWithType by lazy { FuncWithType(name, type) }
+    val fwt = WasmFuncWithType(name, type)
 }

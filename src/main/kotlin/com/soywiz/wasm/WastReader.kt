@@ -26,6 +26,7 @@ open class WastReader {
     val datas = arrayListOf<Wasm.Data>()
     val elements = arrayListOf<Wasm.Element>()
     val exports = arrayListOf<WastExport>()
+    val functionHeaders = LinkedHashMap<String, WasmFuncWithType>()
 
     fun addFunctionType(type: FunctionType) {
         functionTypes += type
@@ -39,6 +40,23 @@ open class WastReader {
 
     fun Block.parseModule(): WasmModule {
         check(this.name == "module")
+        for (param in this.params.filterIsInstance<Block>()) {
+            when (param.name) {
+                "import" -> {
+                    val import = param.parseImport()
+                    val obj = import.obj
+                    when (obj) {
+                        is WasmFunc -> {
+                            functionHeaders[obj.fwt.name] = obj.fwt
+                        }
+                    }
+                }
+                "func" -> {
+                    val funcHeader = param.parseFuncHeader()
+                    functionHeaders[funcHeader.name] = funcHeader
+                }
+            }
+        }
         for (param in this.params.filterIsInstance<Block>()) {
             when (param.name) {
                 "type" -> addFunctionType(param.parseType())
@@ -122,6 +140,7 @@ open class WastReader {
     class WastImport(val ns: String, val name: String, val obj: Any) {
         val wasmImport get() = Wasm.Import(ns, name, 0, 0, Unit)
     }
+
     class ImportMemory(val a1: String, val a2: String, val a3: String)
     class ImportTable(val a1: String, val a2: String, val a3: String)
 
@@ -159,7 +178,7 @@ open class WastReader {
                     }
                 }
                 val funcType = WasmType.Function(params.withIndex().map { AstLocal(it.index, it.value) }, result)
-                println("FUNC: $importName ($params) -> ($result) <-- $ns::$name")
+                //println("FUNC: $importName ($params) -> ($result) <-- $ns::$name")
                 WasmFunc(
                     index = -1,
                     type = funcType,
@@ -174,14 +193,14 @@ open class WastReader {
                 val a1 = import.string(0)
                 val a2 = import.string(1)
                 val a3 = import.string(2)
-                println("MEMORY: $a1, $a2, $a3 <-- $ns::$name")
+                //println("MEMORY: $a1, $a2, $a3 <-- $ns::$name")
                 ImportMemory(a1, a2, a3)
             }
             "table" -> {
                 val a1 = import.string(0)
                 val a2 = import.string(1)
                 val a3 = import.string(2)
-                println("TABLE: $a1, $a2, $a3 <-- $ns::$name")
+                //println("TABLE: $a1, $a2, $a3 <-- $ns::$name")
                 ImportTable(a1, a2, a3)
             }
             else -> {
@@ -218,6 +237,7 @@ open class WastReader {
         val expr = expr(0, BlockBuilderContext())
         val data = string(1)
         val dataBA = data.map { it.toByte() }.toByteArray()
+        //File("/tmp/mem-1024.bin").writeBytes(dataBA)
         return Wasm.Data(index = index, data = dataBA, memindex = 0, ast = expr)
     }
 
@@ -230,6 +250,25 @@ open class WastReader {
         check(func.name == "func")
         val fname = func.string(0)
         return WastExport(fexportname, fname)
+    }
+
+    fun Block.parseFuncHeader(): WasmFuncWithType {
+        check(this.name == "func")
+        val p = reader()
+        val funcName = p.string()
+        val params = arrayListOf<AstLocal>()
+        val results = arrayListOf<WasmType>()
+        while (p.hasMore) {
+            val b = (p.read() as? Block?) ?: continue
+            if (b.name == "param") {
+                params += AstLocal(b.string(0), WasmType(b.string(1)))
+            } else if (b.name == "result") {
+                results += WasmType(b.string(0))
+            } else {
+                break
+            }
+        }
+        return WasmFuncWithType(funcName, WasmType.Function(params, results))
     }
 
     fun Block.parseFunc(globals: Map<String, AstGlobal>, functionTypes: Map<String, WasmType.Function>): WasmFunc {
@@ -313,11 +352,26 @@ open class WastReader {
         return when (op.kind) {
             WasmOp.Kind.LOCAL_GLOBAL -> {
                 when (op) {
-                    WasmOp.Op_set_local -> Wast.SetLocal(local(0, ctx), expr(1, ctx))
-                    WasmOp.Op_tee_local -> Wast.TeeLocal(local(0, ctx), expr(1, ctx))
-                    WasmOp.Op_get_local -> Wast.Local(local(0, ctx))
-                    WasmOp.Op_set_global -> Wast.SetGlobal(global(0, ctx), expr(1, ctx))
-                    WasmOp.Op_get_global -> Wast.Global(global(0, ctx))
+                    WasmOp.Op_set_local -> {
+                        check(nparams == 2)
+                        Wast.SetLocal(local(0, ctx), expr(1, ctx))
+                    }
+                    WasmOp.Op_tee_local -> {
+                        check(nparams == 2)
+                        Wast.TeeLocal(local(0, ctx), expr(1, ctx))
+                    }
+                    WasmOp.Op_get_local -> {
+                        check(nparams == 1)
+                        Wast.Local(local(0, ctx))
+                    }
+                    WasmOp.Op_set_global -> {
+                        check(nparams == 2)
+                        Wast.SetGlobal(global(0, ctx), expr(1, ctx))
+                    }
+                    WasmOp.Op_get_global -> {
+                        check(nparams == 1)
+                        Wast.Global(global(0, ctx))
+                    }
                     else -> invalidOp
                 }
             }
@@ -341,7 +395,7 @@ open class WastReader {
             }
             WasmOp.Kind.DROP -> {
                 check(nparams == 1)
-                Wast.STM_EXPR(expr(0, ctx))
+                stm(0, ctx)
             }
             WasmOp.Kind.MEMORY_STORE, WasmOp.Kind.MEMORY_LOAD -> {
                 val rparams = arrayListOf<Block>()
@@ -370,7 +424,7 @@ open class WastReader {
                 val name = string(0)
                 val args = (1 until nparams).map { node(it, ctx) as Wast.Expr }
                 if (WasmOp(block.name) == WasmOp.Op_call) {
-                    Wast.CALL(func(name, ctx), args)
+                    Wast.CALL(functionHeaders[name] ?: error("Can't find function with name $name"), args)
                 } else {
                     Wast.CALL_INDIRECT(funcType(name, ctx), args.first(), args.drop(1))
                 }
@@ -378,11 +432,11 @@ open class WastReader {
             WasmOp.Kind.FLOW -> {
                 when (op) {
                     WasmOp.Op_if -> {
-                        var result: Block? = null
+                        var resultType: WasmType = WasmType.void
                         val rparams = arrayListOf<Block>()
                         for (param in params) {
                             if (param is Block && param.name == "result") {
-                                result = param
+                                resultType = WasmType(param.string(0))
                             } else if (param is Block) {
                                 rparams += param
                             } else {
@@ -390,7 +444,7 @@ open class WastReader {
                             }
                         }
                         when {
-                            result != null -> {
+                            resultType != WasmType.void -> {
                                 check(rparams.size == 3)
                                 Wast.Terop(op, expr(rparams[0], ctx), expr(rparams[1], ctx), expr(rparams[2], ctx))
                             }
@@ -411,8 +465,20 @@ open class WastReader {
                         }
                     }
                     WasmOp.Op_br -> {
-                        check(nparams == 1)
-                        Wast.BR(label(0, ctx))
+                        check(nparams <= 2) { "$params" }
+                        when (nparams) {
+                            1 -> Wast.BR(label(0, ctx))
+                            2 -> Wast.BR(label(0, ctx), expr(1, ctx))
+                            else -> invalidOp
+                        }
+                    }
+                    WasmOp.Op_br_if -> {
+                        check(nparams <= 3) { "$params" }
+                        when (nparams) {
+                            2 -> Wast.BR_IF(label(0, ctx), expr(1, ctx))
+                            3 -> Wast.BR_IF(label(0, ctx), expr(2, ctx), result = expr(1, ctx))
+                            else -> invalidOp
+                        }
                     }
                     WasmOp.Op_br_table -> {
                         val labels = arrayListOf<AstLabel>()
@@ -430,11 +496,23 @@ open class WastReader {
                         Wast.BR_TABLE(cases, defaultLabel, expr(cond, ctx))
                     }
                     WasmOp.Op_block, WasmOp.Op_loop -> {
-                        val blockName = if (params.getOrNull(0) is String) {
-                            string(0)
+                        val rparams = reader()
+
+                        val blockName = if (rparams.peek() is String) {
+                            rparams.string()
                         } else {
                             null
                         }
+
+                        var blockType: WasmType = WasmType.void
+
+                        if (rparams.peek() is Block) {
+                            if ((rparams.peek() as Block).name == "result") {
+                                blockType = WasmType(rparams.block().string(0))
+                                //TODO()
+                            }
+                        }
+
                         val startIndex = if (blockName != null) 1 else 0
                         val label = blockName?.let {
                             AstLabel(
@@ -448,15 +526,19 @@ open class WastReader {
                         } else {
                             ctx
                         }
-                        val nodes = (startIndex until nparams).map { stm(block(it), nctx) }
+                        val nodes = rparams.restBlock().map { stm(it, nctx) }
                         if (op == WasmOp.Op_loop) {
                             Wast.LOOP(label, Wast.Stms(nodes))
                         } else {
-                            Wast.BLOCK(label, Wast.Stms(nodes))
+                            if (blockType != WasmType.void) {
+                                Wast.BLOCK_EXPR(label, Wast.Stms(nodes), blockType)
+                            } else {
+                                Wast.BLOCK(label, Wast.Stms(nodes))
+                            }
                         }
                     }
                     WasmOp.Op_nop -> Wast.NOP()
-                    else -> invalidOp
+                    else -> invalidOp("OP: $op")
                 }
             }
             else -> TODO("'$name'")
@@ -468,7 +550,7 @@ open class WastReader {
     }
 
     fun func(name: String, ctx: BlockBuilderContext): WasmFuncRef {
-        return WasmFuncName(name) { TODO() }
+        return WasmFuncName(name) { TODO("Error getting function '$name'") }
     }
 
     fun funcType(name: String, ctx: BlockBuilderContext): WasmType.Function {
@@ -478,6 +560,7 @@ open class WastReader {
     fun Block.node(index: Int, ctx: BlockBuilderContext): Wast = this@WastReader.node(this.block(index), ctx)
     fun Block.expr(index: Int, ctx: BlockBuilderContext): Wast.Expr =
         this@WastReader.node(this.block(index), ctx) as Wast.Expr
+
     fun Block.stm(index: Int, ctx: BlockBuilderContext): Wast.Stm =
         stm(block(index), ctx)
 
@@ -524,7 +607,20 @@ open class WastReader {
         override val str = id
     }
 
+    class ParamsReader(val params: List<Any?>) {
+        val reader = ListReader(params)
+        val hasMore: Boolean get() = reader.hasMore
+
+        fun rest(): List<Any?> = mapWhile({ reader.hasMore }) { reader.read() }
+        fun restBlock(): List<Block> = rest().map { it as Block }
+        fun peek() = reader.peek()
+        fun read() = reader.read()
+        fun string() = reader.read() as? String? ?: error("$this at index=${reader.position} is not a String")
+        fun block() = reader.read() as? Block? ?: error("$this at index=${reader.position} is not a Block")
+    }
+
     data class Block(val name: String, val params: List<Any?>, val comment: String? = null) {
+        fun reader() = ParamsReader(params)
         val nparams get() = params.size
         fun string(index: Int) = params[index] as? String? ?: error("$this at index=$index is not a String")
         fun block(index: Int) = params[index] as? Block? ?: error("$this at index=$index is not a Block")
@@ -581,32 +677,34 @@ open class WastReader {
                 '"' -> {
                     readChar()
                     var str = ""
-                    while (!eof) {
+                    loop@ while (!eof) {
                         val pp = peek()
-                        if (pp == '\\') {
-                            val p1 = read()
-                            val p2 = read()
-                            when (p2) {
-                                '\\' -> str += '\\'
-                                '\"' -> str += '\"'
-                                '\'' -> str += '\''
-                                't' -> str += '\t'
-                                'r' -> str += '\r'
-                                'n' -> str += '\n'
-                                in '0'..'9', in 'a'..'f', in 'A'..'F' -> {
-                                    val p3 = read()
-                                    str += "$p2$p3".toInt(16).toChar()
+                        when (pp) {
+                            '\\' -> {
+                                val p1 = read()
+                                val p2 = read()
+                                str += when (p2) {
+                                    '\\' -> '\\'
+                                    '\"' -> '\"'
+                                    '\'' -> '\''
+                                    't' -> '\t'
+                                    'r' -> '\r'
+                                    'n' -> '\n'
+                                    in '0'..'9', in 'a'..'f', in 'A'..'F' -> {
+                                        val p3 = read()
+                                        "$p2$p3".toInt(16).toChar() // @TODO: Optimize this!
+                                    }
+                                    else -> TODO("unknown string escape sequence $p1$p2")
                                 }
-                                else -> TODO("unknown string escape sequence $p1$p2")
                             }
-                        } else if (pp == '\"') {
-                            break
-                        } else {
-                            str += read()
+                            '\"' -> {
+                                readChar()
+                                break@loop
+                            }
+                            else -> str += read()
                         }
                     }
                     out += Str(str)
-                    readChar()
                 }
                 in '0'..'9', '-' -> {
                     out += Num(readWhile { it in '0'..'9' || it == '.' || it == 'e' || it == 'E' || it == '-' })

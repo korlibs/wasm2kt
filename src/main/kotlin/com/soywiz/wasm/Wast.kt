@@ -37,6 +37,8 @@ interface Wast {
         val type: WasmType
     }
 
+    data class BLOCK_EXPR(val label: AstLabel?, val stm: Stm, override val type: WasmType) : Expr
+
     data class Const(override val type: WasmType, val value: Any) : Expr, Imm
     data class Local(val local: AstLocal) : Expr, Imm {
         override val type: WasmType = local.type
@@ -59,8 +61,8 @@ interface Wast {
         override val type: WasmType = op.outType
     }
 
-    data class CALL(val func: WasmFuncRef, val args: List<Expr>) : Expr {
-        override val type: WasmType get() = func.func.type.retType
+    data class CALL(val func: WasmFuncWithType, val args: List<Expr>) : Expr {
+        override val type: WasmType get() = func.type.retType
     }
 
     data class CALL_INDIRECT(override val type: WasmType.Function, val address: Expr, val args: List<Expr>) : Expr
@@ -82,7 +84,7 @@ interface Wast {
     }
     data class TeeLocal(val local: AstLocal, val expr: Expr) : Expr {
         init {
-            check(local.type == expr.type)
+            //check(local.type == expr.type) { "localType=${local.type} != exprType=${expr.type}" }
         }
         override val type: WasmType = expr.type
     }
@@ -106,8 +108,8 @@ interface Wast {
     ) : Stm,
         MemoryAccess
 
-    data class BR(val label: AstLabel) : Stm
-    data class BR_IF(val label: AstLabel, val cond: Expr) : Stm
+    data class BR(val label: AstLabel, val result: Expr? = null) : Stm
+    data class BR_IF(val label: AstLabel, val cond: Expr, val result: Expr? = null) : Stm
     data class BR_TABLE(val labels: List<IndexedValue<AstLabel>>, val default: AstLabel, val subject: Expr) : Stm
     data class InvalidStm(val reason: String) : Stm
     class Unreachable() : Stm
