@@ -8,16 +8,6 @@ data class ExportConfig(
 )
 
 open class Exporter(val module: WasmModule) {
-    val moduleCtx = ModuleDumpContext()
-    val functionsWithImport = module.functions.filter { it.import != null }
-    val functionsByImport = functionsWithImport.map { it.import!!.importPair to it }.toMap()
-    val handledFunctionsWithImport = LinkedHashSet<WasmFunc>()
-
-    val globalsWithImport = module.globals.filter { it.import != null }
-    val globalsByImport = globalsWithImport.map { it.import!!.importPair to it }.toMap()
-
-    val handledGlobalsWithImport = LinkedHashSet<Wasm.WasmGlobal>()
-
     companion object {
         val JAVA_KEYWORDS = setOf("do", "while", "if", "else", "void", "int", "this") // ...
         val PHI_NAMES = setOf("phi_i32", "phi_i64", "phi_f32", "phi_f64", "java")
@@ -39,10 +29,235 @@ open class Exporter(val module: WasmModule) {
         val O_TRUNC = 0x200
         val O_APPEND = 0x400
         val O_DSYNC = 0x1000
+
+        val i32 = WasmType.i32
+        val i64 = WasmType.i64
+        val f32 = WasmType.f32
+        val f64 = WasmType.f64
     }
 
+    val moduleCtx = ModuleDumpContext()
+    val functionsWithImport = module.functions.filter { it.import != null }
+    val functionsByImport = functionsWithImport.map { it.import!!.importPair to it }.toMap()
+    val handledFunctionsWithImport = LinkedHashSet<WasmFunc>()
+
+    val globalsWithImport = module.globals.filter { it.import != null }
+    val globalsByImport = globalsWithImport.map { it.import!!.importPair to it }.toMap()
+
+    val handledGlobalsWithImport = LinkedHashSet<Wasm.WasmGlobal>()
+
+    fun cast_int(expr: String) = cast(i32, expr)
+    fun cast_long(expr: String) = cast(i64, expr)
+    fun cast_float(expr: String) = cast(f32, expr)
+    fun cast_double(expr: String) = cast(f64, expr)
+
+    inline fun Indenter.unop_int(op: WasmOp, expr: () -> String) = unop(op, i32, i32, expr())
+    inline fun Indenter.unop_float(op: WasmOp, expr: () -> String) = unop(op, f32, f32, expr())
+    inline fun Indenter.unop_double(op: WasmOp, expr: () -> String) = unop(op, f64, f64, expr())
+
+    inline fun Indenter.binop_int_bool(op: WasmOp, expr: () -> String) = binop(op, i32, i32, "b2i(${expr()})")
+    inline fun Indenter.binop_int(op: WasmOp, expr: () -> String) = binop(op, i32, i32, expr())
+
+    inline fun Indenter.binop_long_bool(op: WasmOp, expr: () -> String) = binop(op, i64, i32, "b2i(${expr()})")
+    inline fun Indenter.binop_long(op: WasmOp, expr: () -> String) = binop(op, i64, i64, expr())
+    inline fun Indenter.binop_long_int(op: WasmOp, expr: () -> String) = binop(op, i64, i32, expr())
+
+    inline fun Indenter.binop_float_bool(op: WasmOp, expr: () -> String) = binop(op, f32, i32, "b2i(${expr()})")
+    inline fun Indenter.binop_float(op: WasmOp, expr: () -> String) = binop(op, f32, f32, expr())
+
+    inline fun Indenter.binop_double_bool(op: WasmOp, expr: () -> String) = binop(op, f64, i32, "b2i(${expr()})")
+    inline fun Indenter.binop_double(op: WasmOp, expr: () -> String) = binop(op, f64, f64, expr())
+
+    inline fun Indenter.binop(op: WasmOp, arg: WasmType, ret: WasmType, expr: () -> String) = binop(op, arg, ret, expr())
+    inline fun Indenter.unop(op: WasmOp, arg: WasmType, ret: WasmType, expr: () -> String) = unop(op, arg, ret, expr())
+
+    open fun Indenter.binop(op: WasmOp, arg: WasmType, ret: WasmType, expr: String) = line("private ${ret.type()} $op(${arg.type()} l, ${arg.type()} r) { return $expr; }")
+    open fun Indenter.unop(op: WasmOp, arg: WasmType, ret: WasmType, expr: String) = line("private ${ret.type()} $op(${arg.type()} v) { return $expr; }")
+    open fun ternary(cond: String, strue: String, sfalse: String) = "(($cond) ? ($strue) : ($sfalse))"
+    open fun cast(type: WasmType, expr: String) = "((${type.type()})($expr))"
+    open val AND = "&"
+    open val OR = "|"
+    open val XOR = "^"
+    open val SHL = "<<"
+    open val SHR = ">>"
+    open val SHRU = ">>>"
+
     // https://webassembly.github.io/spec/core/exec/numerics.html
-    protected open fun writeOps(i: Indenter) {
+    protected open fun Indenter.writeOps() {
+    }
+
+    protected open fun Indenter.writeBaseOps() {
+        unop(WasmOp.Op_i32_eqz, i32, i32) { "b2i(v == 0)" }
+        unop(WasmOp.Op_i64_eqz, i64, i32) { "b2i(v == 0L)" }
+
+        binop_int_bool(WasmOp.Op_i32_eq) { "l == r" }
+        binop_int_bool(WasmOp.Op_i32_ne) { "l != r" }
+        binop_int_bool(WasmOp.Op_i32_lt_s) { "l < r" }
+        binop_int_bool(WasmOp.Op_i32_lt_u) { "java.lang.Integer.compareUnsigned(l, r) < 0" }
+        binop_int_bool(WasmOp.Op_i32_gt_s) { "l > r" }
+        binop_int_bool(WasmOp.Op_i32_gt_u) { "java.lang.Integer.compareUnsigned(l, r) > 0" }
+        binop_int_bool(WasmOp.Op_i32_le_s) { "l <= r" }
+        binop_int_bool(WasmOp.Op_i32_le_u) { "java.lang.Integer.compareUnsigned(l, r) <= 0" }
+        binop_int_bool(WasmOp.Op_i32_ge_s) { "l >= r" }
+        binop_int_bool(WasmOp.Op_i32_ge_u) { "java.lang.Integer.compareUnsigned(l, r) >= 0" }
+
+        binop_long_bool(WasmOp.Op_i64_eq) { "l == r" }
+        binop_long_bool(WasmOp.Op_i64_ne) { "l != r" }
+        binop_long_bool(WasmOp.Op_i64_lt_s) { "l < r" }
+        binop_long_bool(WasmOp.Op_i64_lt_u) { "java.lang.Long.compareUnsigned(l, r) < 0" }
+        binop_long_bool(WasmOp.Op_i64_gt_s) { "l > r" }
+        binop_long_bool(WasmOp.Op_i64_gt_u) { "java.lang.Long.compareUnsigned(l, r) > 0" }
+        binop_long_bool(WasmOp.Op_i64_le_s) { "l <= r" }
+        binop_long_bool(WasmOp.Op_i64_le_u) { "java.lang.Long.compareUnsigned(l, r) <= 0" }
+        binop_long_bool(WasmOp.Op_i64_ge_s) { "l >= r" }
+        binop_long_bool(WasmOp.Op_i64_ge_u) { "java.lang.Long.compareUnsigned(l, r) >= 0" }
+
+        binop_float_bool(WasmOp.Op_f32_eq) { "l == r" }
+        binop_float_bool(WasmOp.Op_f32_ne) { "l != r" }
+        binop_float_bool(WasmOp.Op_f32_lt) { "l < r" }
+        binop_float_bool(WasmOp.Op_f32_gt) { "l > r" }
+        binop_float_bool(WasmOp.Op_f32_le) { "l <= r" }
+        binop_float_bool(WasmOp.Op_f32_ge) { "l >= r" }
+
+        binop_double_bool(WasmOp.Op_f64_eq) { "l == r" }
+        binop_double_bool(WasmOp.Op_f64_ne) { "l != r" }
+        binop_double_bool(WasmOp.Op_f64_lt) { "l < r" }
+        binop_double_bool(WasmOp.Op_f64_gt) { "l > r" }
+        binop_double_bool(WasmOp.Op_f64_le) { "l <= r" }
+        binop_double_bool(WasmOp.Op_f64_ge) { "l >= r" }
+
+        unop(WasmOp.Op_i32_clz, i32, i32) { "java.lang.Integer.numberOfLeadingZeros(v)" }
+        unop(WasmOp.Op_i32_ctz, i32, i32) { "java.lang.Integer.numberOfTrailingZeros(v)" }
+        unop(WasmOp.Op_i32_popcnt, i32, i32) { "java.lang.Integer.bitCount(v)" }
+
+        binop_int(WasmOp.Op_i32_add) { "l + r" }
+        binop_int(WasmOp.Op_i32_sub) { "l - r" }
+        binop_int(WasmOp.Op_i32_mul) { "l * r" }
+        binop_int(WasmOp.Op_i32_div_s) { "l / r" }
+        binop_int(WasmOp.Op_i32_div_u) { "java.lang.Integer.divideUnsigned(l, r)" }
+        binop_int(WasmOp.Op_i32_rem_s) { "l % r" }
+        binop_int(WasmOp.Op_i32_rem_u) { "java.lang.Integer.remainderUnsigned(l, r)" }
+
+        binop_int(WasmOp.Op_i32_and) { "l $AND r" }
+        binop_int(WasmOp.Op_i32_or) { "l $OR r" }
+        binop_int(WasmOp.Op_i32_xor) { "l $XOR r" }
+        binop_int(WasmOp.Op_i32_shl) { "l $SHL r" }
+        binop_int(WasmOp.Op_i32_shr_s) { "l $SHR r" }
+        binop_int(WasmOp.Op_i32_shr_u) { "l $SHRU r" }
+        binop_int(WasmOp.Op_i32_rotl) { "java.lang.Integer.rotateLeft(l, r)" }
+        binop_int(WasmOp.Op_i32_rotr) { "java.lang.Integer.rotateRight(l, r)" }
+
+        unop(WasmOp.Op_i64_clz, i64, i32) { "java.lang.Long.numberOfLeadingZeros(v)" }
+        unop(WasmOp.Op_i64_ctz, i64, i32) { "java.lang.Long.numberOfTrailingZeros(v)" }
+        unop(WasmOp.Op_i64_popcnt, i64, i32) { "java.lang.Long.bitCount(v)" }
+
+        binop_long(WasmOp.Op_i64_add) { "l + r" }
+        binop_long(WasmOp.Op_i64_sub) { "l - r" }
+        binop_long(WasmOp.Op_i64_mul) { "l * r" }
+        binop_long(WasmOp.Op_i64_div_s) { "l / r" }
+        binop_long(WasmOp.Op_i64_div_u) { "java.lang.Long.divideUnsigned(l, r)" }
+        binop_long(WasmOp.Op_i64_rem_s) { "l % r" }
+        binop_long(WasmOp.Op_i64_rem_u) { "java.lang.Long.remainderUnsigned(l, r)" }
+        binop_long(WasmOp.Op_i64_and) { "l $AND r" }
+        binop_long(WasmOp.Op_i64_or) { "l $OR r" }
+        binop_long(WasmOp.Op_i64_xor) { "l $XOR r" }
+        binop_long(WasmOp.Op_i64_shl) { "l $SHL r" }
+        binop_long(WasmOp.Op_i64_shr_s) { "l $SHR r" }
+        binop_long(WasmOp.Op_i64_shr_u) { "l $SHRU r" }
+        binop_long(WasmOp.Op_i64_rotl) { "java.lang.Long.rotateLeft(l, ${cast_int("r")})" }
+        binop_long(WasmOp.Op_i64_rotr) { "java.lang.Long.rotateRight(l, ${cast_int("r")})" }
+
+        unop_float(WasmOp.Op_f32_abs) { "java.lang.Math.abs(v)" }
+        unop_float(WasmOp.Op_f32_neg) { "-v" }
+        unop_float(WasmOp.Op_f32_ceil) { cast_float("java.lang.Math.ceil(${cast_double("v")})") }
+        unop_float(WasmOp.Op_f32_floor) { cast_float("java.lang.Math.floor(${cast_double("v")})") }
+        unop_float(WasmOp.Op_f32_trunc) { cast_float(cast_long("v")) } // @TODO: TODO
+        unop_float(WasmOp.Op_f32_nearest) { cast_float("java.lang.Math.round(${cast_double("v")})") } // @TODO: TODO
+        unop_float(WasmOp.Op_f32_sqrt) { cast_float("java.lang.Math.sqrt(${cast_double("v")})") }
+
+        binop_float(WasmOp.Op_f32_add) { "l + r" }
+        binop_float(WasmOp.Op_f32_sub) { "l - r" }
+        binop_float(WasmOp.Op_f32_mul) { "l * r" }
+        binop_float(WasmOp.Op_f32_div) { "l / r" }
+        binop_float(WasmOp.Op_f32_min) { "java.lang.Math.min(l, r)" }
+        binop_float(WasmOp.Op_f32_max) { "java.lang.Math.max(l, r)" }
+        binop_float(WasmOp.Op_f32_copysign) { "java.lang.Math.copySign(l, r)" }
+
+        unop_double(WasmOp.Op_f64_abs) { "java.lang.Math.abs(v)" }
+        unop_double(WasmOp.Op_f64_neg) { "-v" }
+        unop_double(WasmOp.Op_f64_ceil) { "java.lang.Math.ceil(v)" }
+        unop_double(WasmOp.Op_f64_floor) { "java.lang.Math.floor(v)" }
+        unop_double(WasmOp.Op_f64_trunc) { cast_double(cast_long("v")) } // @TODO: TODO
+        unop_double(WasmOp.Op_f64_nearest) { "java.lang.Math.round(v)" } // @TODO: TODO
+        unop_double(WasmOp.Op_f64_sqrt) { "java.lang.Math.sqrt(v)" }
+
+        binop_double(WasmOp.Op_f64_add) { "l + r" }
+        binop_double(WasmOp.Op_f64_sub) { "l - r" }
+        binop_double(WasmOp.Op_f64_mul) { "l * r" }
+        binop_double(WasmOp.Op_f64_div) { "l / r" }
+        binop_double(WasmOp.Op_f64_min) { "java.lang.Math.min(l, r)" }
+        binop_double(WasmOp.Op_f64_max) { "java.lang.Math.max(l, r)" }
+        binop_double(WasmOp.Op_f64_copysign) { "java.lang.Math.copySign(l, r)" }
+
+        unop(WasmOp.Op_i32_wrap_i64, i64, i32, cast_int("(v & 0xFFFFFFFFL)"))
+        unop(WasmOp.Op_i32_trunc_s_f32, f32, i32, cast_int("v")) // @TODO: VERIFY!
+        unop(WasmOp.Op_i32_trunc_u_f32, f32, i32, cast_int(cast_long("v"))) // @TODO: VERIFY!
+
+        unop(WasmOp.Op_i32_trunc_s_f64, f64, i32) {
+            ternary(
+                "v <= ${cast_double("java.lang.Integer.MIN_VALUE")}",
+                "java.lang.Integer.MIN_VALUE",
+                ternary(
+                    "v >= ${cast_double("java.lang.Integer.MAX_VALUE")}",
+                    "java.lang.Integer.MAX_VALUE",
+                    cast_int("v")
+                )
+            )
+        }
+        unop(WasmOp.Op_i32_trunc_u_f64, f64, i32) { ternary("v <= 0.0", "0", ternary("v >= 4294967296.0", cast_int("4294967296L"), cast_int("v"))) }
+        unop(WasmOp.Op_i64_extend_s_i32, i32, i64) { cast_long("v") }
+        unop(WasmOp.Op_i64_extend_u_i32, i32, i64) { "${cast_long("v")} $AND 0xFFFFFFFFL"  }
+
+        unop(WasmOp.Op_i64_trunc_s_f32, f32, i64) { cast_long("v") } // @TODO: FIXME!
+        unop(WasmOp.Op_i64_trunc_u_f32, f32, i64) { cast_long("v") } // @TODO: FIXME!
+
+        unop(WasmOp.Op_i64_trunc_s_f64, f64, i64) { cast_long("v") } // @TODO: FIXME!
+        unop(WasmOp.Op_i64_trunc_u_f64, f64, i64) { cast_long("v") } // @TODO: FIXME!
+
+        unop(WasmOp.Op_f32_convert_s_i32, i32, f32) { cast_float("v") } // @TODO: FIXME!
+        unop(WasmOp.Op_f32_convert_u_i32, i32, f32) { cast_float("${cast_long("v")} $AND 0xFFFFFFFFL") } // @TODO: FIXME!
+        unop(WasmOp.Op_f32_convert_s_i64, i64, f32) { cast_float("v") } // @TODO: FIXME!
+        unop(WasmOp.Op_f32_convert_u_i64, i64, f32) { cast_float("v") } // @TODO: FIXME!
+
+        unop(WasmOp.Op_f32_demote_f64, f64, f32) { cast_float("v") }
+        unop(WasmOp.Op_f64_promote_f32, f32, f64) { cast_double("v") }
+
+        unop(WasmOp.Op_f64_convert_s_i32, i32, f64) { cast_double("v") }
+        unop(WasmOp.Op_f64_convert_u_i32, i32, f64) { cast_double("${cast_long("v")} $AND 0xFFFFFFFFL") }
+        unop(WasmOp.Op_f64_convert_s_i64, i64, f64) { cast_double("v") }
+        unop(WasmOp.Op_f64_convert_u_i64, i64, f64) { cast_double("v") } // @TODO: FIXME!
+
+        unop(WasmOp.Op_i32_reinterpret_f32, f32, i32) { "java.lang.Float.floatToRawIntBits(v)" }
+        unop(WasmOp.Op_i64_reinterpret_f64, f64, i64) { "java.lang.Double.doubleToRawLongBits(v)" }
+        unop(WasmOp.Op_f32_reinterpret_i32, i32, f32) { "java.lang.Float.intBitsToFloat(v)" }
+        unop(WasmOp.Op_f64_reinterpret_i64, i64, f64) { "java.lang.Double.longBitsToDouble(v)" }
+    }
+
+    protected open fun Indenter.writeMain(className: String) {
+    }
+
+    fun Indenter.iglob(ns: String, name: String, ret: String, callback: () -> String) {
+        getImportGlobal(ns, name)?.let {
+            line("$ret $it = ${callback()};")
+        }
+    }
+
+    fun Indenter.ifunc(ns: String, name: String, ret: String, args: String, callback: Indenter.() -> Unit) {
+        getImportFunc(ns, name)?.let {
+            line("$ret $it($args)") {
+                callback()
+            }
+        }
     }
 
     protected open fun Indenter.syscall(syscall: WasmSyscall, handler: Indenter.() -> Unit) {

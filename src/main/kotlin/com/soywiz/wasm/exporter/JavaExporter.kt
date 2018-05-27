@@ -14,32 +14,8 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
         if (config.packageName.isNotEmpty()) {
             line("package ${config.packageName};")
         }
-        line("public class $className") {
-            val mainFunc = module.functions.firstOrNull { it.export?.name == "_main" }
-            if (mainFunc != null) {
-                val funcName = moduleCtx.getName(mainFunc)
-                line("static public void main(String[] args)") {
-                    line("$className module = new $className();")
-                    line("int result = 0;")
-                    //line("for (int m = 0; m < 100; m++)") {
-                    run {
-                        val mainArity = mainFunc.type.args.size
-                        when (mainArity) {
-                            0 -> line("result = module.$funcName();")
-                            2 -> {
-                                line("int[] array = new int[args.length + 1];")
-                                line("array[0] = module.allocStringz(\"$className\");")
-                                line("for (int n = 1; n < array.length; n++)") {
-                                    line("array[n] = module.allocStringz(args[n - 1]);")
-                                }
-                                line("result = module.$funcName(array.length, module.allocInts(array));")
-                            }
-                            else -> invalidOp("Invalid function main with arity $mainArity")
-                        }
-                    }
-                    line("System.exit(result);")
-                }
-            }
+        line("public final class $className") {
+            writeMain(className)
 
             var maxMem = 1024
             val dataIndices = LinkedHashMap<Int, String>()
@@ -58,27 +34,21 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 }
             }
 
-            line("static public final int heapSize = 64 * 1024 * 1024; // 64 MB")
-            line("static public final int stackSize = 128 * 1024; // 128 KB ")
-
-            line("public byte[] heapBytes = new byte[heapSize];")
-            line("public java.nio.ByteBuffer heap = java.nio.ByteBuffer.wrap(heapBytes).order(java.nio.ByteOrder.nativeOrder());")
-
-            writeOps(this)
-
+            writeMemoryTools()
+            writeOps()
+            writeBaseOps()
             syscalls()
             missingSyscalls()
 
-            line("void __putBytes(int address, byte[] data) { for (int n = 0; n < data.length; n++) heap.put(address + n, data[n]); }")
-            line("void __putInts(int address, int[] data) { for (int n = 0; n < data.length; n++) heap.putInt(address + n * 4, data[n]); }")
-            line("void __putBytes(int address, String data) { for (int n = 0; n < data.length(); n++) heap.put(address + n, (byte)data.charAt(n)); }")
-            line("void __putBytesB64(int address, String... datas) { String out = \"\"; for (int n = 0; n < datas.length; n++) out += datas[n]; __putBytes(address, java.util.Base64.getDecoder().decode(out)); }")
-
-            line("private int GLOBAL_BASE = 1024;")
-            line("private int STACK_INITIAL_SIZE = stackSize;")
             val STACKTOP = getImportGlobal("env", "STACKTOP") ?: "STACKTOP"
             val STACK_MAX = getImportGlobal("env", "STACK_MAX") ?: "STACK_MAX"
+            val DYNAMICTOP_PTR = getImportGlobal("env", "DYNAMICTOP_PTR") ?: "DYNAMICTOP_PTR"
+            val tempDoublePtr = getImportGlobal("env", "tempDoublePtr") ?: "tempDoublePtr"
             val maxmMemAlign = maxMem.nextAlignedTo(1024)
+
+            line("private final int GLOBAL_BASE = 1024;")
+            line("private int STACK_INITIAL_SIZE = STACK_SIZE;")
+
             //line("int $STACKTOP = $maxmMemAlign;")
             //line("int $STACK_MAX = $maxmMemAlign + STACK_INITIAL_SIZE;")
 
@@ -91,27 +61,20 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
             line("public int allocInts(int[] ints) { int address = stackAllocRev(ints.length * 4); __putInts(address, ints); return address; }")
             line("public int allocStringz(String str) { try { return allocBytes((str + \"\\u0000\").getBytes(\"UTF-8\")); } catch (java.io.UnsupportedEncodingException e) { throw new RuntimeException(e); } }")
 
-            val DYNAMICTOP_PTR = getImportGlobal("env", "DYNAMICTOP_PTR") ?: "DYNAMICTOP_PTR"
-            val tempDoublePtr = getImportGlobal("env", "tempDoublePtr") ?: "tempDoublePtr"
-
-            line("int $DYNAMICTOP_PTR = 8;")
-            line("int $tempDoublePtr = 16;")
+            line("private final int $DYNAMICTOP_PTR = 8;")
+            line("private final int $tempDoublePtr = 16;")
 
             line("private void init_dynamictop()") {
                 line("sw($DYNAMICTOP_PTR, $maxmMemAlign + 1024);")
                 line("sw($tempDoublePtr, $maxmMemAlign);")
             }
 
-            getImportGlobal("env", "tableBase")?.let { line("int $it = 0;") }
-            getImportGlobal("env", "ABORT")?.let { line("int $it = -1;") }
-            getImportGlobal("global", "NaN")?.let { line("double $it = java.lang.Double.NaN;") }
-            getImportGlobal(
-                "global",
-                "Infinity"
-            )?.let { line("double $it = java.lang.Double.POSITIVE_INFINITY;") }
+            iglob("env", "tableBase", "int") { "0" }
+            iglob("env", "ABORT", "int") { "-1" }
+            iglob("global", "NaN", "double") { "java.lang.Double.NaN" }
+            iglob("global", "Infinity", "double") { "java.lang.Double.POSITIVE_INFINITY" }
 
             ifunc("global.Math", "pow", "double", "double a, double b") { line("return java.lang.Math.pow(a, b);") }
-
             ifunc("env", "getTotalMemory", "int", "") { line("""return heap.limit();""") }
             ifunc("env", "enlargeMemory", "int", "") { line("""return TODO_i32("enlargeMemory");""") }
             ifunc("env", "abortOnCannotGrowMemory", "void", "") { line("""TODO("abortOnCannotGrowMemory");""") }
@@ -141,52 +104,14 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("return time;")
             }
 
-            line("public void putBytes(int address, byte[] bytes, int offset, int size) {")
-            line("    heap.position(address);")
-            line("    heap.put(bytes, offset, size);")
-            line("}")
-
-            line("public void putBytes(int address, byte[] bytes) { putBytes(address, bytes, 0, bytes.length); }")
-
-            line("public byte[] getBytes(int address, int size) {")
-            line("    byte[] out = new byte[size];")
-            line("    heap.position(address);")
-            line("    heap.get(out);")
-            line("    return out;")
-            line("}")
-
-            line("public void putString(int address, String string, java.nio.charset.Charset charset) {")
-            line("    putBytes(address, string.getBytes(charset));")
-            line("}")
-
-            line("public byte[] getBytez(int address) { return getBytez(address, java.lang.Integer.MAX_VALUE); }")
-
-            line("public byte[] getBytez(int address, int max) {")
-            line("    byte[] bytes = new byte[1024];")
-            line("    int bpos = 0;")
-            line("    for (int n = 0; n < max; n++) {")
-            line("        int v = lbu(address + n);")
-            line("        if (v == 0) break;")
-            line("        if (bpos >= bytes.length - 1) {")
-            line("            bytes = java.util.Arrays.copyOf(bytes, bytes.length * 3);")
-            line("        }")
-            line("        bytes[bpos++] = (byte)v;")
-            line("    }")
-            line("    return java.util.Arrays.copyOf(bytes, bpos);")
-            line("}")
-
-            line("public String getStringz(int address, java.nio.charset.Charset charset) { return new java.lang.String(getBytez(address), charset); }")
-            line("public String getStringz(int address) { return getStringz(address, java.nio.charset.Charset.forName(\"UTF-8\")); }")
 
             for (func in functionsWithImport - handledFunctionsWithImport) {
-                System.err.println("Un-imported function ${func.import}")
+                System.err.println("Unimported function ${func.import}")
             }
 
             val initBlockSize = 16
             line("public $className()") {
-                for (nn in 0 until module.datas.size step initBlockSize) {
-                    line("init_$nn();")
-                }
+                for (nn in 0 until module.datas.size step initBlockSize) line("init_$nn();")
                 line("init_dynamictop();")
             }
             for (nn in 0 until module.datas.size step initBlockSize) {
@@ -233,7 +158,7 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 val rfuncs = functions.map { it to funcToIndices[it] }.filter { it.second != null }
                 val argsWithIndex = (listOf("int index") + args).joinToString(", ")
                 if (rfuncs.isNotEmpty()) {
-                //run {
+                    //run {
                     line("private ${type.retType.type()} invoke_${type.signature}($argsWithIndex)") {
                         line("switch (index)") {
                             for ((func, funcIndices) in rfuncs) {
@@ -258,12 +183,76 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
         }
     }
 
-    fun Indenter.ifunc(ns: String, name: String, ret: String, args: String, callback: Indenter.() -> Unit) {
-        getImportFunc(ns, name)?.let {
-            line("$ret $it($args)") {
-                callback()
+    override fun Indenter.writeMain(className: String) {
+        val mainFunc = module.functions.firstOrNull { it.export?.name == "_main" }
+        if (mainFunc != null) {
+            val funcName = moduleCtx.getName(mainFunc)
+            line("static public void main(String[] args)") {
+                line("$className module = new $className();")
+                line("int result = 0;")
+                //line("for (int m = 0; m < 100; m++)") {
+                run {
+                    val mainArity = mainFunc.type.args.size
+                    when (mainArity) {
+                        0 -> line("result = module.$funcName();")
+                        2 -> {
+                            line("int[] array = new int[args.length + 1];")
+                            line("array[0] = module.allocStringz(\"$className\");")
+                            line("for (int n = 1; n < array.length; n++)") {
+                                line("array[n] = module.allocStringz(args[n - 1]);")
+                            }
+                            line("result = module.$funcName(array.length, module.allocInts(array));")
+                        }
+                        else -> invalidOp("Invalid function main with arity $mainArity")
+                    }
+                }
+                line("System.exit(result);")
             }
         }
+    }
+
+    fun Indenter.writeMemoryTools() {
+        line("static public final int HEAP_SIZE = 64 * 1024 * 1024; // 64 MB")
+        line("static public final int STACK_SIZE = 128 * 1024; // 128 KB ")
+        line("")
+        line("public byte[] heapBytes = new byte[HEAP_SIZE];")
+        line("public java.nio.ByteBuffer heap = java.nio.ByteBuffer.wrap(heapBytes).order(java.nio.ByteOrder.nativeOrder());")
+        line("")
+        line("public void __putBytes(int address, byte[] data) { for (int n = 0; n < data.length; n++) heap.put(address + n, data[n]); }")
+        line("public void __putInts(int address, int[] data) { for (int n = 0; n < data.length; n++) heap.putInt(address + n * 4, data[n]); }")
+        line("public void __putBytes(int address, String data) { for (int n = 0; n < data.length(); n++) heap.put(address + n, (byte)data.charAt(n)); }")
+        line("public void __putBytesB64(int address, String... datas) { String out = \"\"; for (int n = 0; n < datas.length; n++) out += datas[n]; __putBytes(address, java.util.Base64.getDecoder().decode(out)); }")
+        line("public void putBytes(int address, byte[] bytes, int offset, int size)") {
+            line("heap.position(address);")
+            line("heap.put(bytes, offset, size);")
+        }
+
+        line("public void putBytes(int address, byte[] bytes) { putBytes(address, bytes, 0, bytes.length); }")
+
+        line("public byte[] getBytes(int address, int size)") {
+            line("byte[] out = new byte[size];")
+            line("heap.position(address);")
+            line("heap.get(out);")
+            line("return out;")
+        }
+
+        line("public void putString(int address, String string, java.nio.charset.Charset charset)") {
+            line("putBytes(address, string.getBytes(charset));")
+        }
+
+        line("public byte[] getBytez(int address) { return getBytez(address, java.lang.Integer.MAX_VALUE); }")
+
+        line("public byte[] getBytez(final int address, final int max)") {
+            line("int n = 0;")
+            line("int cur = address;")
+            line("for (; n < max; n++)") {
+                line("if (heapBytes[cur + n] == 0) break;")
+            }
+            line("return java.util.Arrays.copyOfRange(heapBytes, address, address + n);")
+        }
+
+        line("public String getStringz(int address, java.nio.charset.Charset charset) { return new java.lang.String(getBytez(address), charset); }")
+        line("public String getStringz(int address) { return getStringz(address, java.nio.charset.Charset.forName(\"UTF-8\")); }")
     }
 
     fun dump(func: WasmFunc): Indenter = Indenter {
@@ -315,7 +304,7 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
             line("final int fd = lastFD++;")
             line("final String smode = ((flags & ($O_WRONLY|$O_RDWR)) != 0) ? \"rw\" : \"r\";")
             line("final java.io.File file = new java.io.File(pathName);")
-            line("java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, smode);")
+            line("final java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, smode);")
             line("files.put(fd, raf);")
             line("return fd;")
         }
@@ -352,7 +341,7 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
             line("final int whence = lw(address + 16);")
             line("final long offset = (long)offsetL; // offsetH unused in emscripten")
             //line("System.out.printf(\"llseek fd=%d, offsetH=%d, offsetL=%d, result=%d, whence=%d\", fd, offsetH, offsetL, result, whence);")
-            line("java.io.RandomAccessFile raf = files.get(fd);")
+            line("final java.io.RandomAccessFile raf = files.get(fd);")
             line("if (raf == null) return -1;")
             line("switch (whence)") {
                 line("case 0: raf.seek(offset); break;") // SEEK_SET
@@ -368,7 +357,7 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
             line("final int iov = lw(address + 4);")
             line("final int iovcnt = lw(address + 8);")
             //line("System.out.println(\"readv fd=\" + fd + \", iov=\" + iov + \", iovcnt=\" + iovcnt);")
-            line("java.io.RandomAccessFile raf = files.get(fd);")
+            line("final java.io.RandomAccessFile raf = files.get(fd);")
             line("int ret = 0;")
             line("end:")
             line("for (int cc = 0; cc < iovcnt; cc++)") {
@@ -394,7 +383,7 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
             line("final int iov = lw(address + 4);")
             line("final int iovcnt = lw(address + 8);")
             //line("System.out.println(\"writev fd=\" + fd + \", iov=\" + iov + \", iovcnt=\" + iovcnt);")
-            line("java.io.RandomAccessFile raf = files.get(fd);")
+            line("final java.io.RandomAccessFile raf = files.get(fd);")
             line("int ret = 0;")
             line("for (int cc = 0; cc < iovcnt; cc++)") {
                 line("int ptr = lw((iov + (cc * 8)) + 0);")
@@ -419,7 +408,7 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
 
     }
 
-    override fun writeOps(i: Indenter): Unit = i.run {
+    override fun Indenter.writeOps() {
         line("private int b2i(boolean v) { return v ? 1 : 0; }")
 
         line("private void TODO() { throw new RuntimeException(); }")
@@ -516,153 +505,5 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
             line("return checkAddress(address, offset, align, size);")
         }
         line("")
-
-        line("private int Op_i32_eqz(int l)  { return b2i(l == 0); }")
-        line("private int Op_i64_eqz(long l) { return b2i(l == 0L); }")
-
-        line("private int Op_i32_eq(int l, int r      ) { return b2i(l == r); }")
-        line("private int Op_i32_ne(int l, int r      ) { return b2i(l != r); }")
-        line("private int Op_i32_lt_s(int l, int r    ) { return b2i(l < r); }")
-        line("private int Op_i32_lt_u(int l, int r    ) { return b2i(java.lang.Integer.compareUnsigned(l, r) < 0); }")
-        line("private int Op_i32_gt_s(int l, int r    ) { return b2i(l > r); }")
-        line("private int Op_i32_gt_u(int l, int r    ) { return b2i(java.lang.Integer.compareUnsigned(l, r) > 0); }")
-        line("private int Op_i32_le_s(int l, int r    ) { return b2i(l <= r); }")
-        line("private int Op_i32_le_u(int l, int r    ) { return b2i(java.lang.Integer.compareUnsigned(l, r) <= 0); }")
-        line("private int Op_i32_ge_s(int l, int r    ) { return b2i(l >= r); }")
-        line("private int Op_i32_ge_u(int l, int r    ) { return b2i(java.lang.Integer.compareUnsigned(l, r) >= 0); }")
-
-        line("private int Op_i64_eq  (long l, long r  ) { return b2i(l == r); }")
-        line("private int Op_i64_ne  (long l, long r  ) { return b2i(l != r); }")
-        line("private int Op_i64_lt_s(long l, long r  ) { return b2i(l < r); }")
-        line("private int Op_i64_lt_u(long l, long r  ) { return b2i(java.lang.Long.compareUnsigned(l, r) < 0); }")
-        line("private int Op_i64_gt_s(long l, long r  ) { return b2i(l > r); }")
-        line("private int Op_i64_gt_u(long l, long r  ) { return b2i(java.lang.Long.compareUnsigned(l, r) > 0); }")
-        line("private int Op_i64_le_s(long l, long r  ) { return b2i(l <= r); }")
-        line("private int Op_i64_le_u(long l, long r  ) { return b2i(java.lang.Long.compareUnsigned(l, r) <= 0); }")
-        line("private int Op_i64_ge_s(long l, long r  ) { return b2i(l >= r); }")
-        line("private int Op_i64_ge_u(long l, long r  ) { return b2i(java.lang.Long.compareUnsigned(l, r) >= 0); }")
-
-        line("private int Op_f32_eq(float l, float r) { return b2i(l == r); }")
-        line("private int Op_f32_ne(float l, float r) { return b2i(l != r); }")
-        line("private int Op_f32_lt(float l, float r) { return b2i(l < r); }")
-        line("private int Op_f32_gt(float l, float r) { return b2i(l > r); }")
-        line("private int Op_f32_le(float l, float r) { return b2i(l <= r); }")
-        line("private int Op_f32_ge(float l, float r) { return b2i(l >= r); }")
-
-        line("private int Op_f64_eq(double l, double r) { return b2i(l == r); }")
-        line("private int Op_f64_ne(double l, double r) { return b2i(l != r); }")
-        line("private int Op_f64_lt(double l, double r) { return b2i(l < r); }")
-        line("private int Op_f64_gt(double l, double r) { return b2i(l > r); }")
-        line("private int Op_f64_le(double l, double r) { return b2i(l <= r); }")
-        line("private int Op_f64_ge(double l, double r) { return b2i(l >= r); }")
-
-        line("private int Op_i32_clz(int v) { return java.lang.Integer.numberOfLeadingZeros(v); }")
-        line("private int Op_i32_ctz(int v) { return java.lang.Integer.numberOfTrailingZeros(v); }")
-        line("private int Op_i32_popcnt(int v) { return java.lang.Integer.bitCount(v); }")
-
-        line("private int Op_i32_add(int l, int r) { return l + r; }")
-        line("private int Op_i32_sub(int l, int r) { return l - r; }")
-        line("private int Op_i32_mul(int l, int r) { return l * r; }")
-        line("private int Op_i32_div_s(int l, int r) { return l / r; }")
-        line("private int Op_i32_div_u(int l, int r) { return java.lang.Integer.divideUnsigned(l, r); }")
-        line("private int Op_i32_rem_s(int l, int r) { return l % r; }")
-        line("private int Op_i32_rem_u(int l, int r) { return java.lang.Integer.remainderUnsigned(l, r); }")
-        line("private int Op_i32_and(int l, int r) { return l & r; }")
-        line("private int Op_i32_or(int l, int r) { return l | r; }")
-        line("private int Op_i32_xor(int l, int r) { return l ^ r; }")
-        line("private int Op_i32_shl(int l, int r) { return l << r; }")
-        line("private int Op_i32_shr_s(int l, int r) { return l >> r; }")
-        line("private int Op_i32_shr_u(int l, int r) { return l >>> r; }")
-        line("private int Op_i32_rotl(int l, int r) { return java.lang.Integer.rotateLeft(l, r); }")
-        line("private int Op_i32_rotr(int l, int r) { return java.lang.Integer.rotateRight(l, r); }")
-
-        line("private int Op_i64_clz(long v) { return java.lang.Long.numberOfLeadingZeros(v); }")
-        line("private int Op_i64_ctz(long v) { return java.lang.Long.numberOfTrailingZeros(v); }")
-        line("private int Op_i64_popcnt(long v) { return java.lang.Long.bitCount(v); }")
-        line("private long Op_i64_add(long l, long r) { return l + r; }")
-        line("private long Op_i64_sub(long l, long r) { return l - r; }")
-        line("private long Op_i64_mul(long l, long r) { return l * r; }")
-        line("private long Op_i64_div_s(long l, long r) { return l / r; }")
-        line("private long Op_i64_div_u(long l, long r) { return java.lang.Long.divideUnsigned(l, r); }")
-        line("private long Op_i64_rem_s(long l, long r) { return l % r; }")
-        line("private long Op_i64_rem_u(long l, long r) { return java.lang.Long.remainderUnsigned(l, r); }")
-        line("private long Op_i64_and(long l, long r) { return l & r; }")
-        line("private long Op_i64_or(long l, long r) { return l | r; }")
-        line("private long Op_i64_xor(long l, long r) { return l ^ r; }")
-        line("private long Op_i64_shl(long l, long r) { return l << (int)r; }")
-        line("private long Op_i64_shr_s(long l, long r) { return l >> (int)r; }")
-        line("private long Op_i64_shr_u(long l, long r) { return l >>> (int)r; }")
-        line("private long Op_i64_rotl(long l, int r) { return java.lang.Long.rotateLeft(l, r); }")
-        line("private long Op_i64_rotr(long l, int r) { return java.lang.Long.rotateRight(l, r); }")
-
-        line("private float Op_f32_abs(float v) { return java.lang.Math.abs(v); }")
-        line("private float Op_f32_neg(float v) { return (-v); }")
-        line("private float Op_f32_ceil(float v) { return (float)java.lang.Math.ceil((double)v); }")
-        line("private float Op_f32_floor(float v) { return (float)java.lang.Math.floor((double)v); }")
-        line("private float Op_f32_trunc(float v) { TODO(); return (float)(long)(v); }") // @TODO: TODO
-        line("private float Op_f32_nearest(float v) { TODO(); return (float)java.lang.Math.round((double)v); }") // @TODO: TODO
-        line("private float Op_f32_sqrt(float v) { return (float)java.lang.Math.sqrt((double)v); }")
-
-        line("private float Op_f32_add(float l, float r) { return (l + r); }")
-        line("private float Op_f32_sub(float l, float r) { return (l - r); }")
-        line("private float Op_f32_mul(float l, float r) { return (l * r); }")
-        line("private float Op_f32_div(float l, float r) { return (l / r); }")
-        line("private float Op_f32_min(float l, float r) { return java.lang.Math.min(l, r); }")
-        line("private float Op_f32_max(float l, float r) { return java.lang.Math.min(l, r); }")
-        line("private float Op_f32_copysign(float l, float r) { return java.lang.Math.copySign(l, r); }")
-
-        line("private double Op_f64_abs(double v) { return java.lang.Math.abs(v); }")
-        line("private double Op_f64_neg(double v) { return (-v); }")
-        line("private double Op_f64_ceil(double v) { return java.lang.Math.ceil(v); }")
-        line("private double Op_f64_floor(double v) { return java.lang.Math.floor(v); }")
-        line("private double Op_f64_trunc(double v) { TODO(); return (double)(long)(v); }") // @TODO: TODO
-        line("private double Op_f64_nearest(double v) { TODO(); return java.lang.Math.round(v); }") // @TODO: TODO
-
-        line("private double Op_f64_sqrt(double v) { return java.lang.Math.sqrt(v); }")
-        line("private double Op_f64_add(double l, double r) { return (l + r); }")
-        line("private double Op_f64_sub(double l, double r) { return (l - r); }")
-        line("private double Op_f64_mul(double l, double r) { return (l * r); }")
-        line("private double Op_f64_div(double l, double r) { return (l / r); }")
-        line("private double Op_f64_min(double l, double r) { return java.lang.Math.min(l, r); }")
-        line("private double Op_f64_max(double l, double r) { return java.lang.Math.max(l, r); }")
-        line("private double Op_f64_copysign(double l, double r) { return java.lang.Math.copySign(l, r); }")
-        line("private int Op_i32_wrap_i64(long v)       { return (int)(v & 0xFFFFFFFFL); }")
-        line("private int Op_i32_trunc_s_f32(float v) { return (int)v; }") // @TODO: VERIFY!
-        line("private int Op_i32_trunc_u_f32(float v) { return (int)(long)v; }") // @TODO: VERIFY!
-
-        line("private int Op_i32_trunc_s_f64(double v)") {
-            line("if (v <= (double)java.lang.Integer.MIN_VALUE) return java.lang.Integer.MIN_VALUE;")
-            line("if (v >= (double)java.lang.Integer.MAX_VALUE) return java.lang.Integer.MAX_VALUE;")
-            line("return (int)v;")
-        }
-        line("private int Op_i32_trunc_u_f64(double v)") {
-            line("if (v <= 0.0) return 0;")
-            line("if (v >= 4294967296.0) return (int)4294967296L;")
-            line("return (int)v;")
-        }
-        line("private long Op_i64_extend_s_i32(int v)   { return (long)v; }")
-        line("private long Op_i64_extend_u_i32(int v)   { return (long)v & 0xFFFFFFFFL; }")
-
-        line("private long Op_i64_trunc_s_f32(float v)   { TODO(); return (long)v; }") // @TODO: FIXME!
-        line("private long Op_i64_trunc_u_f32(float v)   { TODO(); return (long)v; }") // @TODO: FIXME!
-
-        line("private long Op_i64_trunc_s_f64(double v)   { return (long)v; }") // @TODO: FIXME!
-        line("private long Op_i64_trunc_u_f64(double v)   { TODO(); return (long)v; }") // @TODO: FIXME!
-
-        line("private float Op_f32_convert_s_i32(int v) { return (float)v; }")
-        line("private float Op_f32_convert_u_i32(int v) { TODO(); return (float)((long)v & 0xFFFFFFFFL); } // @TODO: Fixme!") // @TODO: FIXME!
-        line("private float Op_f32_convert_s_i64(long v) { TODO(); return (float)v; } // @TODO: Fixme!") // @TODO: FIXME!
-        line("private float Op_f32_convert_u_i64(long v) { TODO(); return (float)v; } // @TODO: Fixme!") // @TODO: FIXME!
-
-        line("private float  Op_f32_demote_f64   (double   v) { return (float)v; }")
-        line("private double Op_f64_convert_s_i32(int      v) { return (double)v; }")
-        line("private double Op_f64_convert_u_i32(int      v) { return (double)((long)v & 0xFFFFFFFFL); }")
-        line("private double Op_f64_convert_s_i64(long     v) { return (double)v; }")
-        line("private double Op_f64_convert_u_i64(long     v) { TODO(); return (double)v; } // @TODO: FIXME!") // @TODO: FIXME!
-        line("private double Op_f64_promote_f32  (float    v) { return (double)v; }")
-        line("private int    Op_i32_reinterpret_f32(float  v) { return java.lang.Float.floatToRawIntBits(v); }")
-        line("private long   Op_i64_reinterpret_f64(double v) { return java.lang.Double.doubleToRawLongBits(v); }")
-        line("private float  Op_f32_reinterpret_i32(int    v) { return java.lang.Float.intBitsToFloat(v); }")
-        line("private double Op_f64_reinterpret_i64(long   v) { return java.lang.Double.longBitsToDouble(v); }")
     }
 }
