@@ -246,6 +246,7 @@ class IntegrationTest : BaseIntegrationTest() {
             """
             #include "example2.c"
             """,
+            //optimization = 3,
             optimization = 0,
             wast = true,
             cleanup = { svgPng.delete() },

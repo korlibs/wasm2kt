@@ -152,10 +152,11 @@ open class Exporter(val module: WasmModule) {
                 if (optLabel.isEmpty()) {
                     result = this.stm.dump(ctx, out).appendBreaks(breaks)
                 } else {
-                    out.line("${optLabel}do") {
+                    //out.line("${optLabel}do") {
+                    out.line(optLabel) {
                         result = this.stm.dump(ctx, out).appendBreaks(breaks)
                     }
-                    out.line("while (false);")
+                    //out.line("while (false);")
                 }
                 unreachable = result.unreachable && (label !in breaks)
                 if (ctx.debug) println("BLOCK. ${ctx.func?.name} (block_label=${label?.name}). Unreachable: $unreachable, $breaks")
@@ -176,12 +177,12 @@ open class Exporter(val module: WasmModule) {
                 if (ctx.debug) println("LOOP. ${ctx.func?.name} (loop_label=${label?.name}). Unreachable: $unreachable, $breaks")
             }
             is Wast.IF -> {
-                out.line("if (${this.cond.dump(ctx)} != 0)") {
+                out.line("if (${dumpBoolean(cond, ctx)})") {
                     val result = this.btrue.dump(ctx, out).appendBreaks(breaks)
                 }
             }
             is Wast.IF_ELSE -> {
-                out.line("if (${this.cond.dump(ctx)} != 0)") {
+                out.line("if (${dumpBoolean(cond, ctx)})") {
                     val result = this.btrue.dump(ctx, out).appendBreaks(breaks)
                 }
                 out.line("else") {
@@ -194,7 +195,7 @@ open class Exporter(val module: WasmModule) {
                 unreachable = true
             }
             is Wast.BR_IF -> {
-                out.line("if (${this.cond.dump(ctx)} != 0) " + writeGoto(label, ctx))
+                out.line("if (${dumpBoolean(cond, ctx)}) " + writeGoto(label, ctx))
                 breaks.addLabel(label)
             }
             is Wast.BR_TABLE -> {
@@ -208,12 +209,25 @@ open class Exporter(val module: WasmModule) {
                 }
             }
             is Wast.STM_EXPR -> {
-                var exprStr = this.expr.dump(ctx)
-                while (exprStr.startsWith("(") && exprStr.endsWith(")")) {
-                    exprStr = exprStr.substring(1, exprStr.length - 1)
-                }
+                val exprStr = this.expr.dump(ctx)
+                //var exprStr = this.expr.dump(ctx)
+                //removeParen@while (exprStr.startsWith("(") && exprStr.endsWith(")")) {
+                //    var openCount = 0
+                //    for (n in 0 until exprStr.length) {
+                //        val c = exprStr[n]
+                //        if (c == '(') {
+                //            openCount++
+                //        } else if (c == ')') {
+                //            if (openCount == 0 && n < exprStr.length - 1) {
+                //                break@removeParen
+                //            }
+                //            openCount--
+                //        }
+                //    }
+                //    exprStr = exprStr.substring(1, exprStr.length - 1)
+                //}
 
-                if (this.expr is Wast.Const || this.expr is Wast.Local || this.expr is Wast.Global) {
+                if (this.expr is Wast.Const || this.expr is Wast.Local || this.expr is Wast.Global || this.expr is Wast.Unop || this.expr is Wast.Binop || this.expr is Wast.Terop) {
                     out.line(writeExprStatementNoStm(exprStr))
                 } else {
                     out.line(writeExprStatement(exprStr))
@@ -231,6 +245,29 @@ open class Exporter(val module: WasmModule) {
         return DumpResult(out, breaks, unreachable)
     }
 
+    protected open fun dumpBoolean(expr: Wast.Expr, ctx: DumpContext): String {
+        when (expr) {
+            is Wast.Unop -> when (expr.op) {
+                WasmOp.Op_i32_eqz, WasmOp.Op_i64_eqz -> return "${expr.expr.dump(ctx)} == 0"
+                else -> Unit
+            }
+            is Wast.Binop -> {
+                val l = expr.l.dump(ctx)
+                val r = expr.r.dump(ctx)
+                when (expr.op) {
+                    WasmOp.Op_i32_eq, WasmOp.Op_i64_eq, WasmOp.Op_f32_eq, WasmOp.Op_f64_eq -> return "$l == $r"
+                    WasmOp.Op_i32_ne, WasmOp.Op_i64_ne, WasmOp.Op_f32_ne, WasmOp.Op_f64_ne -> return "$l != $r"
+                    WasmOp.Op_i32_gt_s, WasmOp.Op_i64_gt_s, WasmOp.Op_f32_gt, WasmOp.Op_f64_gt -> return "$l > $r"
+                    WasmOp.Op_i32_lt_s, WasmOp.Op_i64_lt_s, WasmOp.Op_f32_lt, WasmOp.Op_f64_lt -> return "$l < $r"
+                    WasmOp.Op_i32_ge_s, WasmOp.Op_i64_ge_s, WasmOp.Op_f32_ge, WasmOp.Op_f64_ge -> return "$l >= $r"
+                    WasmOp.Op_i32_le_s, WasmOp.Op_i64_le_s, WasmOp.Op_f32_le, WasmOp.Op_f64_le -> return "$l <= $r"
+                    else -> Unit
+                }
+            }
+        }
+        return expr.dump(ctx) + " != 0"
+    }
+
     protected open fun writeGoto(label: AstLabel, ctx: DumpContext) = Indenter(label.goto(ctx) + ";")
     protected open fun writeSetLocal(localName: String, expr: String) = Indenter("$localName = $expr;")
     protected open fun writeSetGlobal(globalName: String, expr: String) = Indenter("this.$globalName = $expr;")
@@ -242,10 +279,10 @@ open class Exporter(val module: WasmModule) {
     protected open fun writeNop() = Indenter("// nop")
     protected open fun writeSetPhi(phiName: String, expr: String) = writeSetLocal(phiName, expr)
 
-    protected open fun const(value: Int) = "($value)"
-    protected open fun const(value: Long) = "(${value}L)"
-    protected open fun const(value: Float) = "(${value}f)"
-    protected open fun const(value: Double) = "($value)"
+    protected open fun const(value: Int) = "$value"
+    protected open fun const(value: Long) = "${value}L"
+    protected open fun const(value: Float) = "${value}f"
+    protected open fun const(value: Double) = "$value"
     protected open fun unop(op: WasmOp, vd: String) = when (op) {
         WasmOp.Op_f32_neg, WasmOp.Op_f64_neg -> "-($vd)"
         WasmOp.Op_f64_promote_f32 -> "((double)($vd))"
@@ -269,7 +306,7 @@ open class Exporter(val module: WasmModule) {
     }
 
     protected open fun terop(op: WasmOp, cond: String, strue: String, sfalse: String) =
-        "((($cond) != 0) ? ($strue) : ($sfalse))"
+        "((($cond)) ? ($strue) : ($sfalse))"
 
     protected open fun getGlobal(name: String) = "this.$name"
     protected open fun getLocal(name: String) = name
@@ -312,14 +349,14 @@ open class Exporter(val module: WasmModule) {
             is Wast.Local -> getLocal(ctx.getName(local))
             is Wast.Global -> getGlobal(ctx.getName(global))
             is Wast.Unop -> unop(op, expr.dump(ctx))
-            is Wast.Terop -> terop(op, cond.dump(ctx), etrue.dump(ctx), efalse.dump(ctx))
+            is Wast.Terop -> terop(op, dumpBoolean(cond, ctx), etrue.dump(ctx), efalse.dump(ctx))
             is Wast.Binop -> binop(op, l.dump(ctx), r.dump(ctx))
             is Wast.CALL -> {
                 "this.${ctx.moduleCtx.getName(func)}(${this.args.joinToString(", ") { it.dump(ctx) }})"
             }
         //is A.CALL_INDIRECT -> "((Op_getFunction(${this.address.dump()}) as (${this.type.type()}))" + "(" + this.args.map { it.dump() }.joinToString(
             is Wast.CALL_INDIRECT -> {
-                "(invoke_${type.signature}(${address.dump(ctx)}, " + args.joinToString(", ") { it.dump(ctx) } + "))"
+                "invoke_${type.signature}(${address.dump(ctx)}, " + args.joinToString(", ") { it.dump(ctx) } + ")"
             }
             is Wast.ReadMemory -> readMemory(op, address.dump(ctx), offset, align)
             is Wast.Phi -> run { ctx.phiTypes += this.type; getPhi("phi_${this.type}") }
