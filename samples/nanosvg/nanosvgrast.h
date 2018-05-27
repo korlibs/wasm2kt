@@ -29,14 +29,15 @@
 extern "C" {
 #endif
 
-//#undef malloc
-//void *malloc_hook_rast(int size) {
-//    printf("malloc_hook_rast(%d)\n", size);
-//    void *res = malloc(size);
-//    printf(" --> %d\n", (int)res);
-//    return res;
-//}
-//#define malloc malloc_hook_rast
+#undef malloc
+void *malloc_hook_rast(int size) {
+    printf("malloc_hook_rast\n");
+    //printf("malloc_hook_rast(%d)\n", size);
+    void *res = malloc(size);
+    //printf(" --> %d\n", (int)res);
+    return res;
+}
+#define malloc malloc_hook_rast
 
 typedef struct NSVGrasterizer NSVGrasterizer;
 

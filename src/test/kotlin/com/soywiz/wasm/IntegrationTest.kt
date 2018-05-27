@@ -2,8 +2,10 @@ package com.soywiz.wasm
 
 import com.soywiz.korio.async.*
 import com.soywiz.korio.stream.*
+import com.soywiz.korio.util.*
 import com.soywiz.korio.vfs.*
 import com.soywiz.wasm.exporter.*
+import java.security.*
 import kotlin.test.*
 
 class IntegrationTest : BaseIntegrationTest() {
@@ -232,19 +234,27 @@ class IntegrationTest : BaseIntegrationTest() {
     }
 
     @Test
-    @Ignore
     fun testNanoSvg() {
         runBlocking {
             localCurrentDirVfs["samples/nanosvg"].copyToTree(root)
+        }
+        val svgPng = root["svg.png"]
+        val checkOutput = suspend {
+            assertEquals("2bb27a0d118712a2894ff56e80fd7dee", svgPng.readAll().md5a().hex)
         }
         assertGccAndJavaExecutionAreEquals(
             """
             #include "example2.c"
             """,
             optimization = 0,
-            wast = true
+            wast = true,
+            cleanup = { svgPng.delete() },
+            checkAfterJava = { checkOutput() },
+            checkAfterGcc = { checkOutput() }
         )
     }
+
+    fun ByteArray.md5a() = MessageDigest.getInstance("MD5").digest(this)
 
     @Test
     @Ignore
@@ -395,7 +405,7 @@ open class BaseIntegrationTest {
             val argsStr = args.joinToString(" ") { it }
             result = runCommand(
                 "docker", "run", "-v", "${root.absolutePath}:/src", GCC_IMAGE,
-                "/bin/sh", "-c", "gcc /src/wasm-program.c -o /src/wasm-program.out && /src/wasm-program.out $argsStr"
+                "/bin/sh", "-c", "cd /src && gcc /src/wasm-program.c -o /src/wasm-program.out && /src/wasm-program.out $argsStr"
             )
         }
         return result
@@ -423,12 +433,9 @@ open class BaseIntegrationTest {
                 true -> WastReader().parseModule(root["wasm-program.wast"].readString())
                 false -> Wasm.read(root["wasm-program.wasm"].readAll().openSync())
             }
-            root["Module.java"].writeString(
-                JavaExporter(wasm).dump(
-                    ExportConfig(
-                        className = "Module"
-                    )
-                ).toString())
+            val classStr = JavaExporter(wasm).dump(ExportConfig(className = "Module")).toString()
+            root["Module.java"].writeString(classStr)
+            root["Module2.java"].writeString(classStr)
 
             // Java -> Class -> Execute
             val argsStr = args.joinToString(" ") { it }
@@ -440,12 +447,20 @@ open class BaseIntegrationTest {
         return result
     }
 
-    protected fun assertGccAndJavaExecutionAreEquals(source: String, vararg args: String, optimization: Int = 3, wast: Boolean = false, cleanup: suspend () -> Unit = {}) {
+    protected fun assertGccAndJavaExecutionAreEquals(
+        source: String,
+        vararg args: String,
+        optimization: Int = 3, wast: Boolean = false,
+        cleanup: suspend () -> Unit = {},
+        checkAfterJava: suspend () -> Unit = {},
+        checkAfterGcc: suspend () -> Unit = {}
+    ) {
         runBlocking { cleanup() }
         val javaOutput = compileAndExecuteJava(source, *args, optimization = optimization, wast = wast)
-
+        runBlocking { checkAfterJava() }
         runBlocking { cleanup() }
         val gccOutput = compileAndExecuteGCC(source, *args)
+        runBlocking { checkAfterGcc() }
         runBlocking { cleanup() }
 
         println(gccOutput)

@@ -58,7 +58,8 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("static public final int heapSize = 64 * 1024 * 1024; // 64 MB")
                 line("static public final int stackSize = 128 * 1024; // 128 KB ")
 
-                line("public java.nio.ByteBuffer heap = java.nio.ByteBuffer.allocate(heapSize).order(java.nio.ByteOrder.nativeOrder());")
+                line("public byte[] heapBytes = new byte[heapSize];")
+                line("public java.nio.ByteBuffer heap = java.nio.ByteBuffer.wrap(heapBytes).order(java.nio.ByteOrder.nativeOrder());")
 
                 // https://webassembly.github.io/spec/core/exec/numerics.html
                 line("private int b2i(boolean v) { return v ? 1 : 0; }")
@@ -408,13 +409,16 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                                 line("int ptr = lw((iov + (cc * 8)) + 0);")
                                 line("int len = lw((iov + (cc * 8)) + 4);")
                                 //line("System.out.println(\"chunk: ptr=\" + ptr + \",len=\" + len);")
-                                line("for (int n = 0; n < len; n++)") {
-                                    line("int c = (raf != null) ? raf.read() : readChar(fd);")
-                                    //line("System.out.println(\"char:\" + c);")
-                                    line("if (c < 0) break end;")
-                                    line("sb(ptr + n, c);")
-                                    line("ret++;")
+
+                                line("int res = 0;")
+                                line("if (raf != null)") {
+                                    line("res = raf.read(heapBytes, ptr, len);")
                                 }
+                                line("else if (fd == 0)") {
+                                    line("res = System.in.read(heapBytes, ptr, len);")
+                                }
+                                line("if (res <= 0) break end;")
+                                line("ret += res;")
                             }
                             line("return ret;")
                         }
@@ -430,11 +434,23 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                                 line("int ptr = lw((iov + (cc * 8)) + 0);")
                                 line("int len = lw((iov + (cc * 8)) + 4);")
                                 //line("System.out.println(\"chunk: ptr=\" + ptr + \",len=\" + len);")
-                                line("for (int n = 0; n < len; n++)") {
-                                    line("int c = lbu(ptr + n);")
-                                    //line("System.out.println(\"char:\" + c);")
-                                    line("if (raf != null) raf.write(c); else printChar(fd, c);")
+                                line("if (len == 0) continue;")
+
+                                line("if (raf != null)") {
+                                    line("raf.write(heapBytes, ptr, len);")
                                 }
+                                line("else if (fd == 1)") {
+                                    line("System.out.write(heapBytes, ptr, len);")
+                                }
+                                line("else if (fd == 2)") {
+                                    line("System.err.write(heapBytes, ptr, len);")
+                                }
+                                //line("for (int n = 0; n < len; n++)") {
+                                //    line("int c = lbu(ptr + n);")
+                                //    //line("System.out.println(\"char:\" + c);")
+                                //    line("if (raf != null) raf.write(c); else printChar(fd, c);")
+                                //}
+
                                 line("ret += len;")
                             }
                             line("return ret;")

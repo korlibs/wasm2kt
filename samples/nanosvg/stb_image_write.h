@@ -76,14 +76,15 @@ extern int stbi_write_tga(char const *filename, int w, int h, int comp, const vo
 #include <string.h>
 #include <assert.h>
 
-//#undef malloc
-//void *malloc_hook_image(int size) {
-//    printf("malloc_hook_image(%d)\n", size);
-//    void *res = malloc(size);
-//    printf(" --> %d\n", (int)res);
-//    return res;
-//}
-//#define malloc malloc_hook_image
+#undef malloc
+void *malloc_hook_image(int size) {
+    printf("malloc_hook_image\n");
+    //printf("malloc_hook_image(%d)\n", size);
+    void *res = malloc(size);
+    //printf(" --> %d\n", (int)res);
+    return res;
+}
+#define malloc malloc_hook_image
 
 typedef unsigned int stbiw_uint32;
 typedef int stb_image_write_test[sizeof(stbiw_uint32)==4 ? 1 : -1];
@@ -397,9 +398,13 @@ static void stbi__wpcrc(unsigned char **data, int len)
    stbi__wp32(*data, crc);
 }
 
+// @TODO: abs macro creates a BLOCK_EXPR
+unsigned int abs_s32(int v) { if (v < 0) return -v; else return v; }
+unsigned char abs_s8(signed char v) { if (v < 0) return -v; else return v; }
+
 static unsigned char stbi__paeth(int a, int b, int c)
 {
-   int p = a + b - c, pa = abs(p-a), pb = abs(p-b), pc = abs(p-c);
+   int p = a + b - c, pa = abs_s32(p-a), pb = abs_s32(p-b), pc = abs_s32(p-c);
    if (pa <= pb && pa <= pc) return (unsigned char) a;
    if (pb <= pc) return (unsigned char) b;
    return (unsigned char) c;
@@ -450,7 +455,7 @@ unsigned char *stbi_write_png_to_mem(unsigned char *pixels, int stride_bytes, in
             }
             if (p) break;
             for (i=0; i < x*n; ++i)
-               est += abs((signed char) line_buffer[i]);
+               est += abs_s8((signed char) line_buffer[i]);
             if (est < bestval) { bestval = est; best = k; }
          }
       }

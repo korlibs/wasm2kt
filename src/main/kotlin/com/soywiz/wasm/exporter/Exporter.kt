@@ -237,19 +237,51 @@ open class Exporter(val module: WasmModule) {
     protected open fun writeUnreachable() = Indenter("// unreachable")
     protected open fun writeNop() = Indenter("// nop")
     protected open fun writeSetPhi(phiName: String, expr: String) = writeSetLocal(phiName, expr)
-    protected open fun writeWriteMemory(op: WasmOp, addr: String, offset: Int, align: Int, expr: String) =
-        Indenter("$op($addr, $offset, $align, $expr);")
 
     protected open fun const(value: Int) =  "($value)"
     protected open fun const(value: Long) =  "(${value}L)"
     protected open fun const(value: Float) =  "(${value}f)"
     protected open fun const(value: Double) =  "($value)"
-    protected open fun binop(op: WasmOp, ld: String, rd: String) = "$op($ld, $rd)"
+    protected open fun unop(op: WasmOp, vd: String) = when (op) {
+        WasmOp.Op_f32_neg, WasmOp.Op_f64_neg -> "-($vd)"
+        else -> "$op($vd)"
+    }
+    protected open fun binop(op: WasmOp, ld: String, rd: String) = when (op) {
+        WasmOp.Op_i32_add, WasmOp.Op_i64_add, WasmOp.Op_f32_add, WasmOp.Op_f64_add -> "($ld + $rd)"
+        WasmOp.Op_i32_sub, WasmOp.Op_i64_sub, WasmOp.Op_f32_sub, WasmOp.Op_f64_sub -> "($ld - $rd)"
+        WasmOp.Op_i32_mul, WasmOp.Op_i64_mul, WasmOp.Op_f32_mul, WasmOp.Op_f64_mul -> "($ld * $rd)"
+        WasmOp.Op_i32_div_s, WasmOp.Op_i64_div_s, WasmOp.Op_f32_div, WasmOp.Op_f64_div -> "($ld / $rd)"
+        WasmOp.Op_i32_rem_s, WasmOp.Op_i64_rem_s -> "($ld % $rd)"
+        WasmOp.Op_i32_and, WasmOp.Op_i64_and -> "($ld & $rd)"
+        WasmOp.Op_i32_or, WasmOp.Op_i64_or -> "($ld | $rd)"
+        WasmOp.Op_i32_xor, WasmOp.Op_i64_xor -> "($ld ^ $rd)"
+        WasmOp.Op_i32_shl, WasmOp.Op_i64_shl -> "($ld << $rd)"
+        WasmOp.Op_i32_shr_s, WasmOp.Op_i64_shr_s -> "($ld >> $rd)"
+        WasmOp.Op_i32_shr_u, WasmOp.Op_i64_shr_u -> "($ld >>> $rd)"
+        else -> "$op($ld, $rd)"
+    }
     protected open fun terop(op: WasmOp, cond: String, strue: String, sfalse: String) = "((($cond) != 0) ? ($strue) : ($sfalse))"
-    protected open fun unop(op: WasmOp, vd: String) = "$op($vd)"
     protected open fun getGlobal(name: String) = "this.$name"
     protected open fun getLocal(name: String) = name
     protected open fun getPhi(name: String) = getLocal(name)
+    protected open fun readMemory(op: WasmOp, address: String, offset: Int, align: Int): String {
+        val raddr = if (offset != 0) "$address + $offset" else address
+        return when (op) {
+            WasmOp.Op_i32_load8_s -> "(int)heap.get($raddr)"
+            WasmOp.Op_i32_load -> "(int)heap.getInt($raddr)"
+            else -> "$op($address, $offset, $align)"
+        }
+    }
+
+    protected open fun writeWriteMemory(op: WasmOp, address: String, offset: Int, align: Int, expr: String): Indenter {
+        val raddr = if (offset != 0) "$address + $offset" else address
+        return when (op) {
+            WasmOp.Op_i32_store -> Indenter("heap.putInt($raddr, $expr);")
+            WasmOp.Op_i32_store8 -> Indenter("heap.put($raddr, (byte)$expr);")
+            WasmOp.Op_i32_store16 -> Indenter("heap.putShort($raddr, (short)$expr);")
+            else -> Indenter("$op($address, $offset, $align, $expr);")
+        }
+    }
 
     fun Wast.Expr.dump(ctx: DumpContext): String {
         return when (this) {
@@ -273,7 +305,7 @@ open class Exporter(val module: WasmModule) {
             is Wast.CALL_INDIRECT -> {
                 "(invoke_${type.signature}(${address.dump(ctx)}, " + args.joinToString(", ") { it.dump(ctx) } + "))"
             }
-            is Wast.ReadMemory -> "${this.op}(${this.address.dump(ctx)}, ${this.offset}, ${this.align})"
+            is Wast.ReadMemory -> readMemory(op, address.dump(ctx), offset, align)
             is Wast.Phi -> run { ctx.phiTypes += this.type; getPhi("phi_${this.type}") }
             is Wast.BLOCK_EXPR -> "TODO_${this.type}(\"BLOCK_EXPR not implemented\")"
             else -> "???($this)"

@@ -28,12 +28,12 @@
 
 #undef malloc
 void *malloc_hook_example(int size) {
-    printf("malloc_hook_example(%d)\n", size);
+    printf("malloc_hook_example\n");
+    //printf("malloc_hook_example(%d)\n", size);
     void *res = malloc(size);
-    printf(" --> %d\n", (int)res);
+    //printf(" --> %d\n", (int)res);
     return res;
 }
-
 #define malloc malloc_hook_example
 
 int main()
