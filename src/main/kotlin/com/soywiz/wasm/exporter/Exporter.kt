@@ -242,16 +242,17 @@ open class Exporter(val module: WasmModule) {
     protected open fun writeNop() = Indenter("// nop")
     protected open fun writeSetPhi(phiName: String, expr: String) = writeSetLocal(phiName, expr)
 
-    protected open fun const(value: Int) =  "($value)"
-    protected open fun const(value: Long) =  "(${value}L)"
-    protected open fun const(value: Float) =  "(${value}f)"
-    protected open fun const(value: Double) =  "($value)"
+    protected open fun const(value: Int) = "($value)"
+    protected open fun const(value: Long) = "(${value}L)"
+    protected open fun const(value: Float) = "(${value}f)"
+    protected open fun const(value: Double) = "($value)"
     protected open fun unop(op: WasmOp, vd: String) = when (op) {
         WasmOp.Op_f32_neg, WasmOp.Op_f64_neg -> "-($vd)"
         WasmOp.Op_f64_promote_f32 -> "((double)($vd))"
         WasmOp.Op_f32_demote_f64 -> "((float)($vd))"
         else -> "$op($vd)"
     }
+
     protected open fun binop(op: WasmOp, ld: String, rd: String) = when (op) {
         WasmOp.Op_i32_add, WasmOp.Op_i64_add, WasmOp.Op_f32_add, WasmOp.Op_f64_add -> "($ld + $rd)"
         WasmOp.Op_i32_sub, WasmOp.Op_i64_sub, WasmOp.Op_f32_sub, WasmOp.Op_f64_sub -> "($ld - $rd)"
@@ -266,7 +267,10 @@ open class Exporter(val module: WasmModule) {
         WasmOp.Op_i32_shr_u, WasmOp.Op_i64_shr_u -> "($ld >>> $rd)"
         else -> "$op($ld, $rd)"
     }
-    protected open fun terop(op: WasmOp, cond: String, strue: String, sfalse: String) = "((($cond) != 0) ? ($strue) : ($sfalse))"
+
+    protected open fun terop(op: WasmOp, cond: String, strue: String, sfalse: String) =
+        "((($cond) != 0) ? ($strue) : ($sfalse))"
+
     protected open fun getGlobal(name: String) = "this.$name"
     protected open fun getLocal(name: String) = name
     protected open fun getPhi(name: String) = getLocal(name)
@@ -285,12 +289,12 @@ open class Exporter(val module: WasmModule) {
     protected open fun writeWriteMemory(op: WasmOp, address: String, offset: Int, align: Int, expr: String): Indenter {
         val raddr = if (offset != 0) "$address + $offset" else address
         return when (op) {
-            WasmOp.Op_i32_store   -> Indenter("this.putInt($raddr, $expr);")
-            WasmOp.Op_i32_store8  -> Indenter("this.putByte($raddr, $expr);")
+            WasmOp.Op_i32_store -> Indenter("this.putInt($raddr, $expr);")
+            WasmOp.Op_i32_store8 -> Indenter("this.putByte($raddr, $expr);")
             WasmOp.Op_i32_store16 -> Indenter("this.putShort($raddr, $expr);")
-            WasmOp.Op_i64_store   -> Indenter("this.putLong($raddr, $expr);")
-            WasmOp.Op_f32_store   -> Indenter("this.putFloat($raddr, $expr);")
-            WasmOp.Op_f64_store   -> Indenter("this.putDouble($raddr, $expr);")
+            WasmOp.Op_i64_store -> Indenter("this.putLong($raddr, $expr);")
+            WasmOp.Op_f32_store -> Indenter("this.putFloat($raddr, $expr);")
+            WasmOp.Op_f64_store -> Indenter("this.putDouble($raddr, $expr);")
             else -> Indenter("$op($address, $offset, $align, $expr);")
         }
     }

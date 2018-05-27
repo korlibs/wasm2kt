@@ -551,7 +551,10 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                     "_abort"
                 )?.let { line("void $it() { throw new RuntimeException(\"ABORT\"); }") }
 
-                getImportFunc("global.Math", "pow")?.let { line("double $it(double a, double b) { return java.lang.Math.pow(a, b); }") }
+                getImportFunc(
+                    "global.Math",
+                    "pow"
+                )?.let { line("double $it(double a, double b) { return java.lang.Math.pow(a, b); }") }
                 getImportFunc("env", "nullFunc_i")?.let { line("int $it(int v) { return 0; }") }
                 getImportFunc("env", "nullFunc_ii")?.let { line("int $it(int v) { return 0; }") }
                 getImportFunc("env", "nullFunc_iii")?.let { line("int $it(int a) { return 0; }") }
@@ -571,7 +574,10 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 getImportFunc("env", "___lock")?.let { line("void $it(int addr) {}") }
                 getImportFunc("env", "___unlock")?.let { line("void $it(int addr) {}") }
 
-                getImportFunc("env", "_emscripten_memcpy_big")?.let { line("int $it(int dst, int src, int count) { System.arraycopy(heapBytes, src, heapBytes, dst, count); return dst; }") }
+                getImportFunc(
+                    "env",
+                    "_emscripten_memcpy_big"
+                )?.let { line("int $it(int dst, int src, int count) { System.arraycopy(heapBytes, src, heapBytes, dst, count); return dst; }") }
                 getImportFunc("env", "___setErrNo")?.let { line("void $it(int errno) {}") }
 
                 for (func in functionsWithImport) {

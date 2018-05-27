@@ -685,7 +685,7 @@ open class WastReader {
 
     fun StrReader.wastTokenize(): List<Token> {
         val out = arrayListOf<Token>()
-        loop@while (!eof) {
+        loop@ while (!eof) {
             val peek = peek()
             when (peek) {
                 ' ', '\t', '\r', '\n' -> {
@@ -717,21 +717,23 @@ open class WastReader {
                             '\\' -> {
                                 val p1 = read()
                                 val p2 = read()
-                                str.append(when (p2) {
-                                    '\\' -> '\\'
-                                    '\"' -> '\"'
-                                    '\'' -> '\''
-                                    't' -> '\t'
-                                    'r' -> '\r'
-                                    'n' -> '\n'
-                                    in '0'..'9', in 'a'..'f', in 'A'..'F' -> {
-                                        val p3 = read()
-                                        val vh = HexUtil.unhex(p2)
-                                        val vl = HexUtil.unhex(p3)
-                                        ((vh shl 4) or vl).toChar()
+                                str.append(
+                                    when (p2) {
+                                        '\\' -> '\\'
+                                        '\"' -> '\"'
+                                        '\'' -> '\''
+                                        't' -> '\t'
+                                        'r' -> '\r'
+                                        'n' -> '\n'
+                                        in '0'..'9', in 'a'..'f', in 'A'..'F' -> {
+                                            val p3 = read()
+                                            val vh = HexUtil.unhex(p2)
+                                            val vl = HexUtil.unhex(p3)
+                                            ((vh shl 4) or vl).toChar()
+                                        }
+                                        else -> TODO("unknown string escape sequence $p1$p2")
                                     }
-                                    else -> TODO("unknown string escape sequence $p1$p2")
-                                })
+                                )
                             }
                             '\"' -> {
                                 readChar()

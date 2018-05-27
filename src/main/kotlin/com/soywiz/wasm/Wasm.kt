@@ -83,7 +83,14 @@ class Wasm {
 
             val module = when {
                 fileContents.readString(0, 4) == "\u0000asm" -> Wasm.read(fileContents.openSync())
-                (fileContents.readString(0, 4) == "(mod") || (file.uniVfs.extensionLC == "wast") -> WastReader().parseModule(fileContents.toString(Charsets.UTF_8))
+                (fileContents.readString(
+                    0,
+                    4
+                ) == "(mod") || (file.uniVfs.extensionLC == "wast") -> WastReader().parseModule(
+                    fileContents.toString(
+                        Charsets.UTF_8
+                    )
+                )
                 else -> TODO("Not a WASM or WAST file")
             }
             val exporter = exporter(lang, module)

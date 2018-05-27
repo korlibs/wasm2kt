@@ -82,10 +82,12 @@ interface Wast {
             return if (stms.size == 1) stms[0] else Stms(true, stms)
         }
     }
+
     data class TeeLocal(val local: AstLocal, val expr: Expr) : Expr {
         init {
             //check(local.type == expr.type) { "localType=${local.type} != exprType=${expr.type}" }
         }
+
         override val type: WasmType = expr.type
     }
 
