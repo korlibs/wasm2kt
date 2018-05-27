@@ -68,15 +68,20 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("public java.nio.ByteBuffer heap = java.nio.ByteBuffer.allocate(heapSize).order(java.nio.ByteOrder.nativeOrder());")
 
                 // https://webassembly.github.io/spec/core/exec/numerics.html
-                line("private int b2i(boolean v)                { return v ? 1 : 0; }")
+                line("private int b2i(boolean v) { return v ? 1 : 0; }")
                 line("private void TODO() { throw new RuntimeException(); }")
 
                 line("private void sb(int address, int value) { Op_i32_store8(address, 0, 0, value); }")
                 line("private void sh(int address, int value) { Op_i32_store16(address, 0, 1, value); }")
                 line("private void sw(int address, int value) { Op_i32_store(address, 0, 2, value); }")
-                line("private int lw(int address) { return Op_i32_load(address, 0, 2); }")
+                line("private void sdw(int address, long value) { Op_i64_store(address, 0, 3, value); }")
+
                 line("private int lb(int address) { return Op_i32_load8_s(address, 0, 0); }")
                 line("private int lbu(int address) { return Op_i32_load8_u(address, 0, 0); }")
+                line("private int lh(int address) { return Op_i32_load16_s(address, 0, 1); }")
+                line("private int lhu(int address) { return Op_i32_load16_u(address, 0, 1); }")
+                line("private int lw(int address) { return Op_i32_load(address, 0, 2); }")
+                line("private long ldw(int address) { return Op_i64_load(address, 0, 3); }")
 
                 line("private int Op_i32_load(int address, int offset, int align) { return heap.getInt(checkAddress(address, offset)); }")
                 line("private long Op_i64_load(int address, int offset, int align) { return heap.getLong(checkAddress(address, offset)); }")
@@ -219,16 +224,16 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("private int Op_i32_trunc_s_f32(float v) { return (int)v; }") // @TODO: FIXME!
                 line("private int Op_i32_trunc_u_f32(float v) { return (int)(long)v; }") // @TODO: FIXME!
 
-                line("private int Op_i32_trunc_s_f64(double v) {")
-                line("    if (v <= (double)java.lang.Integer.MIN_VALUE) return java.lang.Integer.MIN_VALUE;")
-                line("    if (v >= (double)java.lang.Integer.MAX_VALUE) return java.lang.Integer.MAX_VALUE;")
-                line("    return (int)v;")
-                line("}")
-                line("private int Op_i32_trunc_u_f64(double v) {")
-                line("    if (v <= 0.0) return 0;")
-                line("    if (v >= 4294967296.0) return (int)4294967296L;")
-                line("    return (int)v;")
-                line("}")
+                line("private int Op_i32_trunc_s_f64(double v)") {
+                    line("if (v <= (double)java.lang.Integer.MIN_VALUE) return java.lang.Integer.MIN_VALUE;")
+                    line("if (v >= (double)java.lang.Integer.MAX_VALUE) return java.lang.Integer.MAX_VALUE;")
+                    line("return (int)v;")
+                }
+                line("private int Op_i32_trunc_u_f64(double v)") {
+                    line("if (v <= 0.0) return 0;")
+                    line("if (v >= 4294967296.0) return (int)4294967296L;")
+                    line("return (int)v;")
+                }
                 line("private long Op_i64_extend_s_i32(int v)   { return (long)v; }")
                 line("private long Op_i64_extend_u_i32(int v)   { return (long)v & 0xFFFFFFFFL; }")
 
@@ -255,49 +260,187 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("private double Op_f64_reinterpret_i64(long v) { return (java.lang.Double.longBitsToDouble(v)); }")
 
 
-                line("private int checkAddress(int address, int offset) {")
-                line("    int raddress = address + offset;")
-                line("    if (raddress < 0 || raddress >= heap.limit() - 4) {")
-                line("        System.out.printf(\"ADDRESS: %d (%d + %d)\\n\", raddress, address, offset);")
-                line("    }")
-                line("    return raddress;")
-                line("}")
+                line("private int checkAddress(int address, int offset)") {
+                    line("int raddress = address + offset;")
+                    line("if (raddress < 0 || raddress >= heap.limit() - 4)") {
+                        line("System.out.printf(\"ADDRESS: %d (%d + %d)\\n\", raddress, address, offset);")
+                    }
+                    line("return raddress;")
+                }
                 line("")
                 //line("int ___syscall(int syscall, int address) { throw new RuntimeException(\"syscall \" + syscall); }")
+                line("static private final int O_RDONLY = 0x0000;")
+                line("static private final int O_WRONLY = 0x0001;")
+                line("static private final int O_RDWR = 0x0002;")
+                line("static private final int O_CREAT = 0x40;")
+                line("static private final int O_EXCL = 0x80;")
+                line("static private final int O_TRUNC = 0x200;")
+                line("static private final int O_APPEND = 0x400;")
+                line("static private final int O_DSYNC = 0x1000;")
 
-                line("private int ___syscall(int syscall, int address) {")
-                //line("    System.out.println(\"syscall \" + syscall);")
-                line("    switch (syscall) {")
-                line("        case 54: {")
-                line("            int fd = lw(address + 0);")
-                line("            int param = lw(address + 4);")
-                line("            return 0;")
-                line("        }")
-                line("        case 146: {")
-                line("            int stream = lw(address + 0);")
-                line("            int iov = lw(address + 4);")
-                line("            int iovcnt = lw(address + 8);")
-                line("            int ret = 0;")
-                line("            for (int cc = 0; cc < iovcnt; cc++) {")
-                line("                int ptr = lw((iov + (cc * 8)) + 0);")
-                line("                int len = lw((iov + (cc * 8)) + 4);")
-                line("                for (int n = 0; n < len; n++) {")
-                line("                    printChar(stream, lbu(ptr + n));")
-                line("                }")
-                line("                ret += len;")
-                line("            }")
-                line("            return ret;")
-                line("        }")
-                line("    }")
-                line("    throw new RuntimeException(\"syscall \" + syscall);")
-                line("}")
+                line("static private final int SEEK_SET	= 0;")
+                line("static private final int SEEK_CUR	= 1;")
+                line("static private final int SEEK_END	= 2;")
 
-                line("private void printChar(int stream, int c) {")
-                line("    switch (stream) {")
-                line("        case 1: System.out.print((char)c); break;")
-                line("        default: System.err.print((char)c); break;")
-                line("    }")
-                line("}")
+                line("private boolean fdInitialized = false;")
+                line("private int lastFD = 10;")
+                line("private java.util.Map<Integer, java.io.RandomAccessFile> files = new java.util.HashMap<Integer, java.io.RandomAccessFile>();")
+                line("private void initFilesOnce()") {
+                    line("if (fdInitialized) return;")
+                    line("fdInitialized = true;")
+                }
+                line("private int ___syscall(int syscall, int address)") {
+                    line("try") {
+                        line(" return this.___syscall_INT(syscall, address);")
+                    }
+                    line("catch (Throwable t)") {
+                        line("throw new RuntimeException(t);")
+                    }
+                }
+                line("private int ___syscall_INT(int syscall, int address) throws Throwable") {
+                    line("initFilesOnce();")
+                    line("switch (syscall)") {
+                        line("case 5:") {
+                            // open
+                            line("final String pathName = getStringz(lw(address + 0));")
+                            line("final int flags = lw(address + 4);")
+                            line("final int mode = lw(address + 8);")
+                            line("final int fd = lastFD++;")
+                            //line("final String smode;")
+                            //line("switch (flags & 0x7FFF)") {
+                            //    line("case O_RDONLY: smode = \"r\"; break;")
+                            //    line("case O_WRONLY: smode = \"r+\"; break;")
+                            //    line("case O_RDWR: smode = \"r+\"; break;")
+                            //    line("case O_CREAT: smode = \"r\"; break;")
+                            //    line("case O_WRONLY|O_CREAT: smode = \"r+\"; break;")
+                            //    line("case O_RDWR|O_CREAT: smode = \"r+\"; break;")
+                            //    line("case O_WRONLY|O_EXCL: smode = \"rx+\"; break;")
+                            //    line("case O_WRONLY|O_CREAT|O_EXCL: smode = \"rx+\"; break;")
+                            //    line("case O_RDWR|O_TRUNC: smode = \"w+\"; break;")
+                            //    line("case O_WRONLY|O_CREAT|O_TRUNC: smode = \"w\"; break;")
+                            //    line("case O_CREAT|O_RDWR|O_TRUNC: smode = \"w+\"; break;")
+                            //    line("case O_WRONLY|O_CREAT|O_EXCL|O_TRUNC: smode = \"wx\"; break;")
+                            //    line("case O_RDWR|O_CREAT|O_EXCL|O_TRUNC: smode = \"wx+\"; break;")
+                            //    line("case O_APPEND: smode = \"a\"; break;")
+                            //    line("case O_WRONLY|O_APPEND: smode = \"a\"; break;")
+                            //    line("case O_RDWR|O_APPEND: smode = \"a+\"; break;")
+                            //    line("case O_WRONLY|O_CREAT|O_APPEND: smode = \"a\"; break;")
+                            //    line("case O_RDWR|O_CREAT|O_APPEND: smode = \"a+\"; break;")
+                            //    line("case O_WRONLY|O_EXCL|O_APPEND: smode = \"ax\"; break;")
+                            //    line("case O_RDWR|O_EXCL|O_APPEND: smode = \"ax+\"; break;")
+                            //    line("case O_WRONLY|O_CREAT|O_EXCL|O_APPEND: smode = \"ax\"; break;")
+                            //    line("case O_RDWR|O_CREAT|O_EXCL|O_APPEND: smode = \"ax+\"; break;")
+                            //    line("case O_RDONLY|O_DSYNC: smode = \"rs\"; break;")
+                            //    line("case O_RDWR|O_DSYNC: smode = \"rs+\"; break;")
+                            //    line("default: throw new RuntimeException(\"Invalid mode \" + mode);")
+                            //}
+                            line("final String smode = ((flags & (O_WRONLY|O_RDWR)) != 0) ? \"rw\" : \"r\";")
+                            line("final java.io.File file = new java.io.File(pathName);")
+                            //line("if (((flags & O_CREAT) == 0) && file.exists()) return -1;")
+                            //line("System.out.println(\"open: file=\" + file + \", smode=\" + smode);")
+                            line("java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, smode);")
+                            line("files.put(fd, raf);")
+                            line("return fd;") // @TODO: return FD
+                        }
+                        line("case 6:") {
+                            // close
+                            line("final int fd = lw(address + 0);")
+                            //line("System.out.println(\"close fd=\" + fd);")
+                            line("java.io.RandomAccessFile raf = files.remove(fd);")
+                            //line("files.remove(fd);")
+                            line("if (raf != null) raf.close();")
+                            line("return 0;")
+                        }
+                        line("case 54:") {
+                            // ioctl
+                            line("final int fd = lw(address + 0);")
+                            line("final int param = lw(address + 4);")
+                            //line("System.out.println(\"ioctl fd=\" + fd + \", param=\" + param);")
+                            line("return 0;")
+                        }
+                        line("case 140:") {
+                            // llseek
+                            line("final int fd = lw(address + 0);")
+                            line("final int offsetH = lw(address + 4);")
+                            line("final int offsetL = lw(address + 8);")
+                            line("final int result = lw(address + 12);")
+                            line("final int whence = lw(address + 16);")
+                            line("final long offset = (long)offsetL; // offsetH unused in emscripten")
+                            //line("System.out.printf(\"llseek fd=%d, offsetH=%d, offsetL=%d, result=%d, whence=%d\", fd, offsetH, offsetL, result, whence);")
+                            line("java.io.RandomAccessFile raf = files.get(fd);")
+                            line("if (raf == null) return -1;")
+                            line("switch (whence)") {
+                                line("case SEEK_SET: raf.seek(offset); break;")
+                                line("case SEEK_CUR: raf.seek(raf.getFilePointer() + offset); break;")
+                                line("case SEEK_END: raf.seek(raf.length() + offset); break;")
+                            }
+                            line("if (result != 0) sdw(result, raf.getFilePointer());")
+                            line("return 0;")
+                        }
+                        line("case 145:") {
+                            // readv
+                            line("final int fd = lw(address + 0);")
+                            line("final int iov = lw(address + 4);")
+                            line("final int iovcnt = lw(address + 8);")
+                            //line("System.out.println(\"readv fd=\" + fd + \", iov=\" + iov + \", iovcnt=\" + iovcnt);")
+                            line("java.io.RandomAccessFile raf = files.get(fd);")
+                            line("int ret = 0;")
+                            line("end:")
+                            line("for (int cc = 0; cc < iovcnt; cc++)") {
+                                line("int ptr = lw((iov + (cc * 8)) + 0);")
+                                line("int len = lw((iov + (cc * 8)) + 4);")
+                                //line("System.out.println(\"chunk: ptr=\" + ptr + \",len=\" + len);")
+                                line("for (int n = 0; n < len; n++)") {
+                                    line("int c = (raf != null) ? raf.read() : readChar(fd);")
+                                    //line("System.out.println(\"char:\" + c);")
+                                    line("if (c < 0) break end;")
+                                    line("sb(ptr + n, c);")
+                                    line("ret++;")
+                                }
+                            }
+                            line("return ret;")
+                        }
+                        line("case 146:") {
+                            // writev
+                            line("final int fd = lw(address + 0);")
+                            line("final int iov = lw(address + 4);")
+                            line("final int iovcnt = lw(address + 8);")
+                            //line("System.out.println(\"writev fd=\" + fd + \", iov=\" + iov + \", iovcnt=\" + iovcnt);")
+                            line("java.io.RandomAccessFile raf = files.get(fd);")
+                            line("int ret = 0;")
+                            line("for (int cc = 0; cc < iovcnt; cc++)") {
+                                line("int ptr = lw((iov + (cc * 8)) + 0);")
+                                line("int len = lw((iov + (cc * 8)) + 4);")
+                                //line("System.out.println(\"chunk: ptr=\" + ptr + \",len=\" + len);")
+                                line("for (int n = 0; n < len; n++)") {
+                                    line("int c = lbu(ptr + n);")
+                                    //line("System.out.println(\"char:\" + c);")
+                                    line("if (raf != null) raf.write(c); else printChar(fd, c);")
+                                }
+                                line("ret += len;")
+                            }
+                            line("return ret;")
+                        }
+                    }
+                    line("throw new RuntimeException(\"syscall \" + syscall + \" not implemented\");")
+                }
+
+                line("private void printChar(int stream, int c) throws Throwable") {
+                    line("switch (stream)") {
+                        //#define STDOUT_FILENO		1
+                        //#define STDERR_FILENO		2
+                        line("case 1: System.out.print((char)c); break;")
+                        line("case 2: System.err.print((char)c); break;")
+                    }
+                }
+
+                line("private int readChar(int stream) throws Throwable") {
+                    line("switch (stream)") {
+                        //#define STDIN_FILENO		0
+                        line("case 0: return System.in.read();")
+                    }
+                    line("return -1;")
+                }
 
                 line("void __putBytes(int address, byte[] data) { for (int n = 0; n < data.length; n++) heap.put(address + n, data[n]); }")
                 line("void __putInts(int address, int[] data) { for (int n = 0; n < data.length; n++) heap.putInt(address + n * 4, data[n]); }")
@@ -321,12 +464,24 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("public int allocInts(int[] ints) { int address = stackAllocRev(ints.length * 4); __putInts(address, ints); return address; }")
                 line("public int allocStringz(String str) { try { return allocBytes((str + \"\\u0000\").getBytes(\"UTF-8\")); } catch (java.io.UnsupportedEncodingException e) { throw new RuntimeException(e); } }")
 
-                getImportGlobal("env", "DYNAMICTOP_PTR")?.let { line("int $it = 0;") }
-                getImportGlobal("env", "tempDoublePtr")?.let { line("int $it = 64 * 1024;") }
+                val DYNAMICTOP_PTR = getImportGlobal("env", "DYNAMICTOP_PTR") ?: "DYNAMICTOP_PTR"
+                val tempDoublePtr = getImportGlobal("env", "tempDoublePtr") ?: "tempDoublePtr"
+
+                line("int $DYNAMICTOP_PTR = 8;")
+                line("int $tempDoublePtr = 16;")
+
+                line("private void init_dynamictop()") {
+                    line("sw($DYNAMICTOP_PTR, $maxmMemAlign + 64);")
+                    line("sw($tempDoublePtr, $maxmMemAlign);")
+                }
+
                 getImportGlobal("env", "tableBase")?.let { line("int $it = 0;") }
                 getImportGlobal("env", "ABORT")?.let { line("int $it = -1;") }
                 getImportGlobal("global", "NaN")?.let { line("double $it = java.lang.Double.NaN;") }
-                getImportGlobal("global", "Infinity")?.let { line("double $it = java.lang.Double.POSITIVE_INFINITY;") }
+                getImportGlobal(
+                    "global",
+                    "Infinity"
+                )?.let { line("double $it = java.lang.Double.POSITIVE_INFINITY;") }
 
                 getImportFunc("env", "getTotalMemory")?.let { line("int $it() { return heap.limit(); }") }
                 getImportFunc("env", "enlargeMemory")?.let { line("int $it() { throw new RuntimeException(); }") }
@@ -338,7 +493,10 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
 
                 getImportFunc("env", "abort")
                     ?.let { line("void $it(int v) { throw new RuntimeException(\"ABORT \" + v); }") }
-                getImportFunc("env", "_abort")?.let { line("void $it() { throw new RuntimeException(\"ABORT\"); }") }
+                getImportFunc(
+                    "env",
+                    "_abort"
+                )?.let { line("void $it() { throw new RuntimeException(\"ABORT\"); }") }
 
                 getImportFunc("env", "nullFunc_ii")?.let { line("int $it(int v) { return 0; }") }
                 getImportFunc("env", "nullFunc_iiii")?.let { line("int $it(int a) { return 0; }") }
@@ -357,14 +515,17 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 getImportFunc("env", "_emscripten_memcpy_big")
                     ?.let { line("int $it(int a, int b, int c) { throw new RuntimeException(); }") }
                 getImportFunc("env", "___setErrNo")?.let { line("void $it(int errno) {}") }
-                getImportFunc("env", "___syscall6")
-                    ?.let { line("int $it(int syscall, int address) { return ___syscall(6, address); }") } //    SYS_close: 6,
-                getImportFunc("env", "___syscall54")
-                    ?.let { line("int $it(int syscall, int address) { return ___syscall(54, address); }") } //    SYS_ioctl: 54,
-                getImportFunc("env", "___syscall140")
-                    ?.let { line("int $it(int syscall, int address) { return ___syscall(140, address); }") } //    SYS__llseek: 140,
-                getImportFunc("env", "___syscall146")
-                    ?.let { line("int $it(int syscall, int address) { return ___syscall(146, address); }") } //    SYS_writev: 146,
+
+                for (func in functionsWithImport) {
+                    val import = func.import ?: continue
+                    //println("import: $import")
+                    if (import.moduleName == "env" && import.name.startsWith("___syscall")) {
+                        //println("SYSCALL")
+                        val syscallName = getImportFunc(import.moduleName, import.name)
+                        line("int $syscallName(int syscall, int address) { return ___syscall(syscall, address); }")
+                    }
+                }
+
                 getImportFunc("env", "_time")
                     ?.let { line("int $it(int addr) { int time = (int)(System.currentTimeMillis() / 1000L); if (addr != 0) sw(addr, time); return time; }") }
 
@@ -414,6 +575,7 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                     for (nn in 0 until module.datas.size step initBlockSize) {
                         line("init_$nn();")
                     }
+                    line("init_dynamictop();")
                 }
                 for (nn in 0 until module.datas.size step initBlockSize) {
                     line("private void init_$nn()") {
@@ -429,26 +591,21 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 for (global in module.globals) {
                     if (global.import == null) {
                         val computeName = "compute${moduleCtx.getName(global)}"
-                        line("private ${global.globalType.type.type()} $computeName()") {
-                            val getterType = WasmType.Function(listOf(), listOf(global.globalType.type))
-                            val ast: Wast.Stm = when {
-                                global.e != null -> {
-                                    global.e.toAst(module, WasmFunc(-1, getterType))
-                                }
-                                global.ast != null -> global.ast
-                                else -> TODO("Both ${global::e.name} and ${global::ast.name} are null")
-                            }
-
-                            line(
-                                ast.dump(
-                                    DumpContext(
-                                        moduleCtx,
-                                        null
-                                    )
-                                ).indenter
-                            )
+                        val getterType = WasmType.Function(listOf(), listOf(global.globalType.type))
+                        val ast: Wast.Stm = when {
+                            global.e != null -> global.e.toAst(module, WasmFunc(-1, getterType))
+                            global.ast != null -> global.ast
+                            else -> TODO("Both ${global::e.name} and ${global::ast.name} are null")
                         }
-                        line("${global.globalType.type.type()} ${moduleCtx.getName(global)} = $computeName();")
+                        val ctx = DumpContext(moduleCtx, null)
+                        if (ast is Wast.RETURN) {
+                            line("${global.globalType.type.type()} ${moduleCtx.getName(global)} = ${ast.expr.dump(ctx)};")
+                        } else {
+                            line("private ${global.globalType.type.type()} $computeName()") {
+                                line(ast.dump(ctx).indenter)
+                            }
+                            line("${global.globalType.type.type()} ${moduleCtx.getName(global)} = $computeName();")
+                        }
                     }
                 }
 
@@ -485,7 +642,9 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
 
                 //val funcs = module.functions.values.joinToString(", ") { "this::${it.name}" }
                 val funcToIndices = module.elements.flatMap { it.funcRefs }.withIndex()
-                    .map { (module.getFunction(it.value) ?: invalidOp("Invalid referenced function $it")) to it.index }
+                    .map {
+                        (module.getFunction(it.value) ?: invalidOp("Invalid referenced function $it")) to it.index
+                    }
                     .toMapList()
                 //.joinToString(", ") { createDynamicFunction(it.type, it.name) }
                 //line("Object[] functions = new Object[] { $funcs };")

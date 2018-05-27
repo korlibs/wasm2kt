@@ -91,6 +91,43 @@ class IntegrationTest : BaseIntegrationTest() {
     }
 
     @Test
+    fun testFiles() {
+        assertGccAndJavaExecutionAreEquals(
+            """
+            #include <stdio.h>
+            #include <stdlib.h>
+            #include <string.h>
+            int main() {
+                FILE *filew = fopen("fopen-wasm", "wb");
+                fprintf(filew, "%s %s\n", "hello", "world");
+                fclose(filew);
+
+                FILE *filer = fopen("fopen-wasm", "rb");
+                printf("%d\n", (int)fseek(filer, 0, SEEK_END));
+                printf("%d\n", (int)ftell(filer));
+                printf("%d\n", (int)fseek(filer, -8, SEEK_CUR));
+                printf("%d\n", (int)ftell(filer));
+                char data[64] = {0};
+                int read = fread(data, 1, sizeof(data), filer);
+                printf("%d\n", read);
+                data[read] = 0;
+                fclose(filer);
+
+                printf("'%s'\n", data);
+                //fwrite(data, 1, strlen(data), stdout);
+
+                return 0;
+            }
+            """,
+            optimization = 0,
+            wast = true,
+            cleanup = {
+                root["fopen-wasm"].delete()
+            }
+        )
+    }
+
+    @Test
     fun testArgs() {
         assertGccAndJavaExecutionAreEquals(
             """
@@ -192,15 +229,20 @@ open class BaseIntegrationTest {
             val argsStr = args.joinToString(" ") { it }
             result = runCommand(
                 "docker", "run", "-v", "${root.absolutePath}:/src", JDK_IMAGE,
-                "/bin/sh", "-c", "javac /src/Module.java && java -cp /src Module $argsStr"
+                "/bin/sh", "-c", "cd /src && javac /src/Module.java && java -cp /src Module $argsStr"
             )
         }
         return result
     }
 
-    protected fun assertGccAndJavaExecutionAreEquals(source: String, vararg args: String, optimization: Int = 3, wast: Boolean = false) {
+    protected fun assertGccAndJavaExecutionAreEquals(source: String, vararg args: String, optimization: Int = 3, wast: Boolean = false, cleanup: suspend () -> Unit = {}) {
+        runBlocking { cleanup() }
         val javaOutput = compileAndExecuteJava(source, *args, optimization = optimization, wast = wast)
+
+        runBlocking { cleanup() }
         val gccOutput = compileAndExecuteGCC(source, *args)
+        runBlocking { cleanup() }
+
         println(gccOutput)
         assertEquals(gccOutput, javaOutput, "Executing args=${args.toList()}\n" + source.trimIndent())
     }

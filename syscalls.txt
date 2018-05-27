@@ -1,3 +1,4 @@
+https://github.com/kripken/emscripten/blob/f17306eae0b0dc055a7f0a912d74da5f1b2c147c/src/library_syscall.js
 
 //var SYSCALL_NAME_TO_CODE = {
 //    SYS_restart_syscall: 0,
@@ -345,3 +346,30 @@
 //    SYS_kcmp: 349,
 //    SYS_finit_module: 350
 //};
+
+flagsToPermissionStringMap: {
+0/*O_RDONLY*/: 'r',
+1/*O_WRONLY*/: 'r+',
+2/*O_RDWR*/: 'r+',
+64/*O_CREAT*/: 'r',
+65/*O_WRONLY|O_CREAT*/: 'r+',
+66/*O_RDWR|O_CREAT*/: 'r+',
+129/*O_WRONLY|O_EXCL*/: 'rx+',
+193/*O_WRONLY|O_CREAT|O_EXCL*/: 'rx+',
+514/*O_RDWR|O_TRUNC*/: 'w+',
+577/*O_WRONLY|O_CREAT|O_TRUNC*/: 'w',
+578/*O_CREAT|O_RDWR|O_TRUNC*/: 'w+',
+705/*O_WRONLY|O_CREAT|O_EXCL|O_TRUNC*/: 'wx',
+706/*O_RDWR|O_CREAT|O_EXCL|O_TRUNC*/: 'wx+',
+1024/*O_APPEND*/: 'a',
+1025/*O_WRONLY|O_APPEND*/: 'a',
+1026/*O_RDWR|O_APPEND*/: 'a+',
+1089/*O_WRONLY|O_CREAT|O_APPEND*/: 'a',
+1090/*O_RDWR|O_CREAT|O_APPEND*/: 'a+',
+1153/*O_WRONLY|O_EXCL|O_APPEND*/: 'ax',
+1154/*O_RDWR|O_EXCL|O_APPEND*/: 'ax+',
+1217/*O_WRONLY|O_CREAT|O_EXCL|O_APPEND*/: 'ax',
+1218/*O_RDWR|O_CREAT|O_EXCL|O_APPEND*/: 'ax+',
+4096/*O_RDONLY|O_DSYNC*/: 'rs',
+4098/*O_RDWR|O_DSYNC*/: 'rs+'
+},

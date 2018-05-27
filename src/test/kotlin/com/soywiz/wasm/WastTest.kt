@@ -12,11 +12,13 @@ class WastTest {
         //val wasm = WastReader().parseModule(resourcesVfs["wasm-program.wast"].readString())
         //val wasm = WastReader().parseModule(resourcesVfs["wasm-program-hello-world2.wast"].readString())
         //val wasm = WastReader().parseModule(resourcesVfs["wasm-program-hello-world2-unoptimized.wast"].readString())
-        val wasm = WastReader().parseModule(resourcesVfs["wasm-program-doubles-unoptimized.wast"].readString())
+        //val wasm = WastReader().parseModule(resourcesVfs["wasm-program-doubles-unoptimized.wast"].readString())
+        val wasm = WastReader().parseModule("/tmp/encode.wast".uniVfs.readString())
         val exporter = JavaExporter(wasm)
-        File("/tmp/my/Module.java").apply { parentFile.mkdirs() }.writeText(exporter.dump(
+        File("/tmp/my/Brotli.java").apply { parentFile.mkdirs() }.writeText(exporter.dump(
             ExportConfig(
-                className = "Module"
+                className = "Brotli",
+                packageName = ""
             )
         ).toString())
 
