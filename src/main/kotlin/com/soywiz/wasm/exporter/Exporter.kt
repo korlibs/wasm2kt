@@ -15,7 +15,61 @@ open class Exporter(val module: WasmModule) {
 
     val globalsWithImport = module.globals.filter { it.import != null }
     val globalsByImport = globalsWithImport.map { it.import!!.importPair to it }.toMap()
+
     val handledGlobalsWithImport = LinkedHashSet<Wasm.WasmGlobal>()
+
+    companion object {
+        val JAVA_KEYWORDS = setOf("do", "while", "if", "else", "void", "int", "this") // ...
+        val PHI_NAMES = setOf("phi_i32", "phi_i64", "phi_f32", "phi_f64", "java")
+        val RESERVED_LOCALS = setOf("index")
+        val JAVA_DEFINED_NAMES: Set<String> = JAVA_KEYWORDS + PHI_NAMES + RESERVED_LOCALS
+
+        fun JavaNameAllocator() = NameAllocator {
+            //var res = it.replace('$', '_').replace('-', '_')
+            var res = it.replace('-', '_')
+            while (res in JAVA_DEFINED_NAMES) res = "_$res"
+            res
+        }
+
+        val O_RDONLY = 0x0000
+        val O_WRONLY = 0x0001
+        val O_RDWR = 0x0002
+        val O_CREAT = 0x40
+        val O_EXCL = 0x80
+        val O_TRUNC = 0x200
+        val O_APPEND = 0x400
+        val O_DSYNC = 0x1000
+    }
+
+    // https://webassembly.github.io/spec/core/exec/numerics.html
+    protected open fun writeOps(i: Indenter) {
+    }
+
+    protected open fun Indenter.syscall(syscall: WasmSyscall, handler: Indenter.() -> Unit) {
+        getImportFunc("env", "___syscall${syscall.id}")?.let {
+            line("private int $it(int syscall, int address)") {
+                line("try") {
+                    handler()
+                }
+                line("catch (Throwable e)") {
+                    line("throw new RuntimeException(e);")
+                }
+            }
+        }
+    }
+
+    fun Indenter.missingSyscalls() {
+        for (func in functionsWithImport) {
+            val import = func.import ?: continue
+            if (import.moduleName == "env" && import.name.startsWith("___syscall") && func !in handledFunctionsWithImport) {
+                val syscallId = import.name.removePrefix("___syscall").toInt()
+                val syscall = WasmSyscall.SYSCALL_BY_ID[syscallId] ?: continue
+                syscall(syscall) {
+                    line("return TODO_i32(\"unimplemented syscall $syscallId\");")
+                }
+            }
+        }
+    }
 
     fun getImportFunc(ns: String, name: String): String? {
         val import = Pair(ns, name)
@@ -36,20 +90,6 @@ open class Exporter(val module: WasmModule) {
             moduleCtx.getName(global)
         } else {
             null
-        }
-    }
-
-    companion object {
-        val JAVA_KEYWORDS = setOf("do", "while", "if", "else", "void", "int", "this") // ...
-        val PHI_NAMES = setOf("phi_i32", "phi_i64", "phi_f32", "phi_f64", "java")
-        val RESERVED_LOCALS = setOf("index")
-        val JAVA_DEFINED_NAMES: Set<String> = JAVA_KEYWORDS + PHI_NAMES + RESERVED_LOCALS
-
-        fun JavaNameAllocator() = NameAllocator {
-            //var res = it.replace('$', '_').replace('-', '_')
-            var res = it.replace('-', '_')
-            while (res in JAVA_DEFINED_NAMES) res = "_$res"
-            res
         }
     }
 

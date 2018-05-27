@@ -1,7 +1,7 @@
 package com.soywiz.wasm
 
 @Suppress("EnumEntryName")
-enum class WasmSyscalls(val id: Int) {
+enum class WasmSyscall(val id: Int) {
     SYS_restart_syscall(0),
     SYS_exit(1),
     SYS_fork(2),
