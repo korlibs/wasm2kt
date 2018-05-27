@@ -152,7 +152,6 @@ open class Exporter(val module: WasmModule) {
                 out.line("${optLabel}do") {
                     result = this.stm.dump(ctx, out).appendBreaks(breaks)
                 }
-
                 out.line("while (false);")
                 unreachable = result.unreachable && (label !in breaks)
                 if (ctx.debug) println("BLOCK. ${ctx.func?.name} (block_label=${label?.name}). Unreachable: $unreachable, $breaks")

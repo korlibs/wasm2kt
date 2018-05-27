@@ -80,26 +80,31 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("private int lw(int address) { return Op_i32_load(address, 0, 2); }")
                 line("private long ldw(int address) { return Op_i64_load(address, 0, 3); }")
 
-                line("private int Op_i32_load(int address, int offset, int align) { return heap.getInt(checkAddress(address, offset)); }")
-                line("private long Op_i64_load(int address, int offset, int align) { return heap.getLong(checkAddress(address, offset)); }")
-                line("private float Op_f32_load(int address, int offset, int align) { return heap.getFloat(checkAddress(address, offset)); }")
-                line("private double Op_f64_load(int address, int offset, int align) { return heap.getDouble(checkAddress(address, offset)); }")
-                line("private int Op_i32_load8_s(int address, int offset, int align) { return (int)heap.get(checkAddress(address, offset)); }")
-                line("private int Op_i32_load8_u(int address, int offset, int align) { return Op_i32_load8_s(address, offset, align) & 0xFF; }")
-                line("private int Op_i32_load16_s(int address, int offset, int align) { return (int)heap.getShort(checkAddress(address, offset)); }")
-                line("private int Op_i32_load16_u(int address, int offset, int align) { return (int)heap.getShort(checkAddress(address, offset)) & 0xFFFF; }")
-                line("private long Op_i64_load8_s(int address, int offset, int align) { return (long)heap.get(checkAddress(address, offset)); }")
-                line("private long Op_i64_load8_u(int address, int offset, int align) { return ((long)heap.get(checkAddress(address, offset))) & 0xFFL; }")
-                line("private long Op_i64_load16_s(int address, int offset, int align) { return (long)heap.getShort(checkAddress(address, offset)); }")
-                line("private long Op_i64_load16_u(int address, int offset, int align) { return (long)heap.getShort(checkAddress(address, offset)) & 0xFFFFL; }")
-                line("private long Op_i64_load32_s(int address, int offset, int align) { return (long)heap.getInt(checkAddress(address, offset)); }")
-                line("private long Op_i64_load32_u(int address, int offset, int align) { return (long)heap.getInt(checkAddress(address, offset)) & 0xFFFFFFFFL; }")
-                line("private void Op_i32_store(int address, int offset, int align, int value) { heap.putInt(checkAddress(address, offset), value); }")
-                line("private void Op_i64_store(int address, int offset, int align, long value) { heap.putLong(checkAddress(address, offset), value); }")
-                line("private void Op_f32_store(int address, int offset, int align, float value) { heap.putFloat(checkAddress(address, offset), value); }")
-                line("private void Op_f64_store(int address, int offset, int align, double value) { heap.putDouble(checkAddress(address, offset), value); }")
-                line("private void Op_i32_store8(int address, int offset, int align, int value) { heap.put(checkAddress(address, offset), (byte)value); }")
-                line("private void Op_i32_store16(int address, int offset, int align, int value) { heap.putShort(checkAddress(address, offset), (short)value); }")
+                line("private int Op_i32_load(int address, int offset, int align) { return heap.getInt(checkAddressRead(address, offset, align, 4)); }")
+                line("private long Op_i64_load(int address, int offset, int align) { return heap.getLong(checkAddressRead(address, offset, align, 8)); }")
+                line("private float Op_f32_load(int address, int offset, int align) { return heap.getFloat(checkAddressRead(address, offset, align, 4)); }")
+                line("private double Op_f64_load(int address, int offset, int align) { return heap.getDouble(checkAddressRead(address, offset, align, 8)); }")
+                line("private int Op_i32_load8_s(int address, int offset, int align) { return (int)heap.get(checkAddressRead(address, offset, align, 1)); }")
+                line("private int Op_i32_load8_u(int address, int offset, int align) { return (int)heap.get(checkAddressRead(address, offset, align, 1)) & 0xFF; }")
+                line("private int Op_i32_load16_s(int address, int offset, int align) { return (int)heap.getShort(checkAddressRead(address, offset, align, 2)); }")
+                line("private int Op_i32_load16_u(int address, int offset, int align) { return (int)heap.getShort(checkAddressRead(address, offset, align, 2)) & 0xFFFF; }")
+                line("private long Op_i64_load8_s(int address, int offset, int align) { return (long)heap.get(checkAddressRead(address, offset, align, 1)); }")
+                line("private long Op_i64_load8_u(int address, int offset, int align) { return ((long)heap.get(checkAddressRead(address, offset, align, 1))) & 0xFFL; }")
+                line("private long Op_i64_load16_s(int address, int offset, int align) { return (long)heap.getShort(checkAddressRead(address, offset, align, 2)); }")
+                line("private long Op_i64_load16_u(int address, int offset, int align) { return (long)heap.getShort(checkAddressRead(address, offset, align, 2)) & 0xFFFFL; }")
+                line("private long Op_i64_load32_s(int address, int offset, int align) { return (long)heap.getInt(checkAddressRead(address, offset, align, 4)); }")
+                line("private long Op_i64_load32_u(int address, int offset, int align) { return (long)heap.getInt(checkAddressRead(address, offset, align, 4)) & 0xFFFFFFFFL; }")
+
+                line("private void Op_i32_store(int address, int offset, int align, int value)") {
+                    //line("if (address + offset == 1109175052) System.out.println(\"write \" + address + \"=\" + value);")
+                    //line("System.out.println(\"write \" + address + \"=\" + value);")
+                    line("heap.putInt(checkAddressWrite(address, offset, align, 4), value);")
+                }
+                line("private void Op_i64_store(int address, int offset, int align, long value) { heap.putLong(checkAddressWrite(address, offset, align, 8), value); }")
+                line("private void Op_f32_store(int address, int offset, int align, float value) { heap.putFloat(checkAddressWrite(address, offset, align, 4), value); }")
+                line("private void Op_f64_store(int address, int offset, int align, double value) { heap.putDouble(checkAddressWrite(address, offset, align, 8), value); }")
+                line("private void Op_i32_store8(int address, int offset, int align, int value) { heap.put(checkAddressWrite(address, offset, align, 1), (byte)value); }")
+                line("private void Op_i32_store16(int address, int offset, int align, int value) { heap.putShort(checkAddressWrite(address, offset, align, 2), (short)value); }")
                 line("private void Op_i64_store8(int address, int offset, int align, long value) { Op_i32_store8(address, offset, align, (int)value); }")
                 line("private void Op_i64_store16(int address, int offset, int align, long value) { Op_i32_store16(address, offset, align, (int)value); }")
                 line("private void Op_i64_store32(int address, int offset, int align, long value) { Op_i32_store(address, offset, align, (int)value); }")
@@ -109,6 +114,29 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 //Op_i64_const
                 //Op_f32_const
                 //Op_f64_const
+
+                line("private int checkAddress(int address, int offset, int align, int size)") {
+                    line("int raddress = address + offset;")
+                    line("if (raddress < 0 || raddress >= heap.limit() - 4)") {
+                        line("System.out.printf(\"ADDRESS: %d (%d + %d) align=%d, size=%d\\n\", raddress, address, offset, align, size);")
+                    }
+                    //line("if ((raddress & ((1 << align) - 1)) != 0)") {
+                    //    line("System.out.printf(\"UNALIGNED ACCESS %d (%d + %d) align=%d, size=%d!\\n\", raddress, address, offset, align, size);")
+                    //}
+                    line("return raddress;")
+                }
+                line("")
+
+                line("private int checkAddressRead(int address, int offset, int align, int size)") {
+                    line("return checkAddress(address, offset, align, size);")
+                }
+                line("")
+
+                line("private int checkAddressWrite(int address, int offset, int align, int size)") {
+                    line("return checkAddress(address, offset, align, size);")
+                }
+                line("")
+
                 line("private int Op_i32_eqz(int l)  { return b2i(l == 0); }")
                 line("private int Op_i64_eqz(long l) { return b2i(l == 0L); }")
 
@@ -165,8 +193,8 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("private int Op_i32_shl(int l, int r) { return l << r; }")
                 line("private int Op_i32_shr_s(int l, int r) { return l >> r; }")
                 line("private int Op_i32_shr_u(int l, int r) { return l >>> r; }")
-                line("private int Op_i32_rotl(int l, int r) { TODO(); return -1; }") // @TODO
-                line("private int Op_i32_rotr(int l, int r) { TODO(); return -1; }") // @TODO
+                line("private int Op_i32_rotl(int l, int r) { return java.lang.Integer.rotateLeft(l, r); }")
+                line("private int Op_i32_rotr(int l, int r) { return java.lang.Integer.rotateRight(l, r); }")
 
                 line("private int Op_i64_clz(long v) { return java.lang.Long.numberOfLeadingZeros(v); }")
                 line("private int Op_i64_ctz(long v) { return java.lang.Long.numberOfTrailingZeros(v); }")
@@ -191,8 +219,8 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("private float Op_f32_neg(float v) { return (-v); }")
                 line("private float Op_f32_ceil(float v) { return (float)java.lang.Math.ceil((double)v); }")
                 line("private float Op_f32_floor(float v) { return (float)java.lang.Math.floor((double)v); }")
-                line("private float Op_f32_trunc(float v) { return (float)(long)(v); }") // @TODO: TODO
-                line("private float Op_f32_nearest(float v) { return (float)java.lang.Math.round((double)v); }") // @TODO: TODO
+                line("private float Op_f32_trunc(float v) { TODO(); return (float)(long)(v); }") // @TODO: TODO
+                line("private float Op_f32_nearest(float v) { TODO(); return (float)java.lang.Math.round((double)v); }") // @TODO: TODO
                 line("private float Op_f32_sqrt(float v) { return (float)java.lang.Math.sqrt((double)v); }")
 
                 line("private float Op_f32_add(float l, float r) { return (l + r); }")
@@ -207,8 +235,8 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("private double Op_f64_neg(double v) { return (-v); }")
                 line("private double Op_f64_ceil(double v) { return java.lang.Math.ceil(v); }")
                 line("private double Op_f64_floor(double v) { return java.lang.Math.floor(v); }")
-                line("private double Op_f64_trunc(double v) { return (double)(long)(v); }") // @TODO: TODO
-                line("private double Op_f64_nearest(double v) { return java.lang.Math.round(v); }") // @TODO: TODO
+                line("private double Op_f64_trunc(double v) { TODO(); return (double)(long)(v); }") // @TODO: TODO
+                line("private double Op_f64_nearest(double v) { TODO(); return java.lang.Math.round(v); }") // @TODO: TODO
 
                 line("private double Op_f64_sqrt(double v) { return java.lang.Math.sqrt(v); }")
                 line("private double Op_f64_add(double l, double r) { return (l + r); }")
@@ -219,8 +247,8 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("private double Op_f64_max(double l, double r) { return java.lang.Math.max(l, r); }")
                 line("private double Op_f64_copysign(double l, double r) { return java.lang.Math.copySign(l, r); }")
                 line("private int Op_i32_wrap_i64(long v)       { return (int)(v & 0xFFFFFFFFL); }")
-                line("private int Op_i32_trunc_s_f32(float v) { return (int)v; }") // @TODO: FIXME!
-                line("private int Op_i32_trunc_u_f32(float v) { return (int)(long)v; }") // @TODO: FIXME!
+                line("private int Op_i32_trunc_s_f32(float v) { return (int)v; }") // @TODO: VERIFY!
+                line("private int Op_i32_trunc_u_f32(float v) { return (int)(long)v; }") // @TODO: VERIFY!
 
                 line("private int Op_i32_trunc_s_f64(double v)") {
                     line("if (v <= (double)java.lang.Integer.MIN_VALUE) return java.lang.Integer.MIN_VALUE;")
@@ -235,37 +263,29 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("private long Op_i64_extend_s_i32(int v)   { return (long)v; }")
                 line("private long Op_i64_extend_u_i32(int v)   { return (long)v & 0xFFFFFFFFL; }")
 
-                line("private long Op_i64_trunc_s_f32(float v)   { return (long)v; }") // @TODO: FIXME!
-                line("private long Op_i64_trunc_u_f32(float v)   { return (long)v; }") // @TODO: FIXME!
+                line("private long Op_i64_trunc_s_f32(float v)   { TODO(); return (long)v; }") // @TODO: FIXME!
+                line("private long Op_i64_trunc_u_f32(float v)   { TODO(); return (long)v; }") // @TODO: FIXME!
 
                 line("private long Op_i64_trunc_s_f64(double v)   { return (long)v; }") // @TODO: FIXME!
-                line("private long Op_i64_trunc_u_f64(double v)   { return (long)v; }") // @TODO: FIXME!
+                line("private long Op_i64_trunc_u_f64(double v)   { TODO(); return (long)v; }") // @TODO: FIXME!
 
                 line("private float Op_f32_convert_s_i32(int v) { return (float)v; }")
-                line("private float Op_f32_convert_u_i32(int v) { return (float)((long)v & 0xFFFFFFFFL); } // @TODO: Fixme!") // @TODO: FIXME!
-                line("private float Op_f32_convert_s_i64(long v) { return (float)v; } // @TODO: Fixme!") // @TODO: FIXME!
-                line("private float Op_f32_convert_u_i64(long v) { return (float)v; } // @TODO: Fixme!") // @TODO: FIXME!
+                line("private float Op_f32_convert_u_i32(int v) { TODO(); return (float)((long)v & 0xFFFFFFFFL); } // @TODO: Fixme!") // @TODO: FIXME!
+                line("private float Op_f32_convert_s_i64(long v) { TODO(); return (float)v; } // @TODO: Fixme!") // @TODO: FIXME!
+                line("private float Op_f32_convert_u_i64(long v) { TODO(); return (float)v; } // @TODO: Fixme!") // @TODO: FIXME!
 
-                line("private float Op_f32_demote_f64(double v) { return (float)v; }")
-                line("private double Op_f64_convert_s_i32(int v) { return (double)v; }")
-                line("private double Op_f64_convert_u_i32(int v) { return (double)((long)v & 0xFFFFFFFFL); }")
-                line("private double Op_f64_convert_s_i64(long v) { return (double)v; }")
-                line("private double Op_f64_convert_u_i64(long v) { return (double)((long)v & 0xFFFFFFFFL); } // @TODO: FIXME!") // @TODO: FIXME!
-                line("private double Op_f64_promote_f32(float v) { return (double)v; }")
-                line("private int Op_i32_reinterpret_f32(float v) { return java.lang.Float.floatToRawIntBits(v); }")
-                line("private long Op_i64_reinterpret_f64(double v) { return java.lang.Double.doubleToRawLongBits(v); }")
-                line("private float Op_f32_reinterpret_i32(int v) { return java.lang.Float.intBitsToFloat(v); }")
-                line("private double Op_f64_reinterpret_i64(long v) { return (java.lang.Double.longBitsToDouble(v)); }")
+                line("private float  Op_f32_demote_f64   (double   v) { return (float)v; }")
+                line("private double Op_f64_convert_s_i32(int      v) { return (double)v; }")
+                line("private double Op_f64_convert_u_i32(int      v) { return (double)((long)v & 0xFFFFFFFFL); }")
+                line("private double Op_f64_convert_s_i64(long     v) { return (double)v; }")
+                line("private double Op_f64_convert_u_i64(long     v) { TODO(); return (double)v; } // @TODO: FIXME!") // @TODO: FIXME!
+                line("private double Op_f64_promote_f32  (float    v) { return (double)v; }")
+                line("private int    Op_i32_reinterpret_f32(float  v) { return java.lang.Float.floatToRawIntBits(v); }")
+                line("private long   Op_i64_reinterpret_f64(double v) { return java.lang.Double.doubleToRawLongBits(v); }")
+                line("private float  Op_f32_reinterpret_i32(int    v) { return java.lang.Float.intBitsToFloat(v); }")
+                line("private double Op_f64_reinterpret_i64(long   v) { return java.lang.Double.longBitsToDouble(v); }")
 
 
-                line("private int checkAddress(int address, int offset)") {
-                    line("int raddress = address + offset;")
-                    line("if (raddress < 0 || raddress >= heap.limit() - 4)") {
-                        line("System.out.printf(\"ADDRESS: %d (%d + %d)\\n\", raddress, address, offset);")
-                    }
-                    line("return raddress;")
-                }
-                line("")
                 //line("int ___syscall(int syscall, int address) { throw new RuntimeException(\"syscall \" + syscall); }")
                 line("static private final int O_RDONLY = 0x0000;")
                 line("static private final int O_WRONLY = 0x0001;")
@@ -469,7 +489,7 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("int $tempDoublePtr = 16;")
 
                 line("private void init_dynamictop()") {
-                    line("sw($DYNAMICTOP_PTR, $maxmMemAlign + 64);")
+                    line("sw($DYNAMICTOP_PTR, $maxmMemAlign + 1024);")
                     line("sw($tempDoublePtr, $maxmMemAlign);")
                 }
 
@@ -516,8 +536,8 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 getImportFunc("env", "___lock")?.let { line("void $it(int addr) {}") }
                 getImportFunc("env", "___unlock")?.let { line("void $it(int addr) {}") }
 
-                getImportFunc("env", "_emscripten_memcpy_big")
-                    ?.let { line("int $it(int a, int b, int c) { throw new RuntimeException(); }") }
+                //getImportFunc("env", "_emscripten_memcpy_big")?.let { line("int $it(int dst, int src, int count) { for (int n = 0; n < count; n++) sb(dst + n, lbu(src + n)); throw new RuntimeException(java.lang.String.format(\"%d,%d,%d\", dst, src, count)); }") }
+                getImportFunc("env", "_emscripten_memcpy_big")?.let { line("int $it(int dst, int src, int count) { for (int n = 0; n < count; n++) sb(dst + n, lbu(src + n)); return dst; }") }
                 getImportFunc("env", "___setErrNo")?.let { line("void $it(int errno) {}") }
 
                 for (func in functionsWithImport) {

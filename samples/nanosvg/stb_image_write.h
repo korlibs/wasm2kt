@@ -76,15 +76,14 @@ extern int stbi_write_tga(char const *filename, int w, int h, int comp, const vo
 #include <string.h>
 #include <assert.h>
 
-#undef malloc
-void *malloc_hook_image(int size) {
-    printf("malloc_hook_image(%d)\n", size);
-    void *res = malloc(size);
-    printf(" --> %d\n", (int)res);
-    return res;
-}
-
-#define malloc malloc_hook_image
+//#undef malloc
+//void *malloc_hook_image(int size) {
+//    printf("malloc_hook_image(%d)\n", size);
+//    void *res = malloc(size);
+//    printf(" --> %d\n", (int)res);
+//    return res;
+//}
+//#define malloc malloc_hook_image
 
 typedef unsigned int stbiw_uint32;
 typedef int stb_image_write_test[sizeof(stbiw_uint32)==4 ? 1 : -1];

@@ -33,15 +33,14 @@
 extern "C" {
 #endif
 
-#undef malloc
-void *malloc_hook_svg(int size) {
-    printf("malloc_hook_svg(%d)\n", size);
-    void *res = malloc(size);
-    printf(" --> %d\n", (int)res);
-    return res;
-}
-
-#define malloc malloc_hook_svg
+//#undef malloc
+//void *malloc_hook_svg(int size) {
+//    printf("malloc_hook_svg(%d)\n", size);
+//    void *res = malloc(size);
+//    printf(" --> %d\n", (int)res);
+//    return res;
+//}
+//#define malloc malloc_hook_svg
 
 // NanoSVG is a simple stupid single-header-file SVG parse. The output of the parser is a list of cubic bezier shapes.
 //
