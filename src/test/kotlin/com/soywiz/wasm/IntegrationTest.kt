@@ -42,28 +42,44 @@ class IntegrationTest : BaseIntegrationTest() {
         )
     }
 
-    //@Test
-    //fun testMalloc() {
-    //    assertGccAndJavaExecutionAreEquals(
-    //        """
-    //        #include <stdio.h>
-    //        #include <stdlib.h>
-    //        #include <time.h>
-    //
-    //        int main() {
-    //            unsigned char* data = (unsigned char *)malloc(1024);
-    //            int sum = 0;
-    //            unsigned long long int mul = 1;
-    //            for (int n = 0; n < 1024; n++) data[n] = (unsigned char)n;
-    //            for (int n = 0; n < 1024; n++) if (data[n] > 7) sum += data[n];
-    //            for (int n = 0; n < 64; n++) if (data[n] != 0) mul *= data[n];
-    //            printf("%d, %llu\n", sum, mul);
-    //            free(data);
-    //            return 0;
-    //        }
-    //        """
-    //    )
-    //}
+    @Test
+    @Ignore
+    fun testNanoSvg() {
+        runBlocking {
+            localCurrentDirVfs["samples/nanosvg"].copyToTree(root)
+        }
+        assertGccAndJavaExecutionAreEquals(
+            """
+            #include "example2.c"
+            """,
+            optimization = 0,
+            wast = true
+        )
+    }
+
+    @Test
+    @Ignore
+    fun testMalloc() {
+        assertGccAndJavaExecutionAreEquals(
+            """
+            #include <stdio.h>
+            #include <stdlib.h>
+            #include <time.h>
+
+            int main() {
+                unsigned char* data = (unsigned char *)malloc(1024);
+                int sum = 0;
+                unsigned long long int mul = 1;
+                for (int n = 0; n < 1024; n++) data[n] = (unsigned char)n;
+                for (int n = 0; n < 1024; n++) if (data[n] > 7) sum += data[n];
+                for (int n = 0; n < 64; n++) if (data[n] != 0) mul *= data[n];
+                printf("%d, %llu\n", sum, mul);
+                free(data);
+                return 0;
+            }
+            """
+        )
+    }
 
     @Test
     fun testDoubles() {

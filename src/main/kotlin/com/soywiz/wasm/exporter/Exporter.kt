@@ -276,6 +276,7 @@ open class Exporter(val module: WasmModule) {
             }
             is Wast.ReadMemory -> "${this.op}(${this.address.dump(ctx)}, ${this.offset}, ${this.align})"
             is Wast.Phi -> run { ctx.phiTypes += this.type; getPhi("phi_${this.type}") }
+            is Wast.BLOCK_EXPR -> "TODO_${this.type}(\"BLOCK_EXPR not implemented\")"
             else -> "???($this)"
         }
     }

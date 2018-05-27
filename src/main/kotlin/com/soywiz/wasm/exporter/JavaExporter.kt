@@ -70,6 +70,10 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 // https://webassembly.github.io/spec/core/exec/numerics.html
                 line("private int b2i(boolean v) { return v ? 1 : 0; }")
                 line("private void TODO() { throw new RuntimeException(); }")
+                line("private int TODO_i32(String reason) { throw new RuntimeException(reason); }")
+                line("private long TODO_i64(String reason) { throw new RuntimeException(reason); }")
+                line("private float TODO_f32(String reason) { throw new RuntimeException(reason); }")
+                line("private double TODO_f64(String reason) { throw new RuntimeException(reason); }")
 
                 line("private void sb(int address, int value) { Op_i32_store8(address, 0, 0, value); }")
                 line("private void sh(int address, int value) { Op_i32_store16(address, 0, 1, value); }")
@@ -498,10 +502,16 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                     "_abort"
                 )?.let { line("void $it() { throw new RuntimeException(\"ABORT\"); }") }
 
+                getImportFunc("global.Math", "pow")?.let { line("double $it(double a, double b) { return java.lang.Math.pow(a, b); }") }
+                getImportFunc("env", "nullFunc_i")?.let { line("int $it(int v) { return 0; }") }
                 getImportFunc("env", "nullFunc_ii")?.let { line("int $it(int v) { return 0; }") }
-                getImportFunc("env", "nullFunc_iiii")?.let { line("int $it(int a) { return 0; }") }
                 getImportFunc("env", "nullFunc_iii")?.let { line("int $it(int a) { return 0; }") }
+                getImportFunc("env", "nullFunc_iiii")?.let { line("int $it(int a) { return 0; }") }
+                getImportFunc("env", "nullFunc_v")?.let { line("int $it(int a) { return 0; }") }
+                getImportFunc("env", "nullFunc_vi")?.let { line("int $it(int a) { return 0; }") }
                 getImportFunc("env", "nullFunc_vii")?.let { line("int $it(int a) { return 0; }") }
+                getImportFunc("env", "nullFunc_viii")?.let { line("int $it(int a) { return 0; }") }
+
                 getImportFunc("env", "_exit")?.let { line("void $it(int code) { System.exit(code); }") }
 
                 getImportFunc(

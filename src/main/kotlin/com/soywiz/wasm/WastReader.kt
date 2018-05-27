@@ -385,6 +385,15 @@ open class WastReader {
                     else -> invalidOp
                 }
             }
+            WasmOp.Kind.TEROP -> {
+                check(nparams == 3)
+                when (op) {
+                    WasmOp.Op_select -> {
+                        Wast.Terop(op, expr(0, ctx), expr(1, ctx), expr(2, ctx))
+                    }
+                    else -> invalidOp
+                }
+            }
             WasmOp.Kind.BINOP -> {
                 check(nparams == 2) { "${op.kind} ${op.name} :: $nparams != 2 :: $params" }
                 Wast.Binop(op, expr(0, ctx), expr(1, ctx))
@@ -546,10 +555,10 @@ open class WastReader {
                         }
                     }
                     WasmOp.Op_nop -> Wast.NOP()
-                    else -> invalidOp("OP: $op")
+                    else -> invalidOp("OP: $op of kind ${op.kind}")
                 }
             }
-            else -> TODO("'$name'")
+            else -> TODO("'$name' of kind ${op.kind}")
         }
     }
 
