@@ -43,6 +43,195 @@ class IntegrationTest : BaseIntegrationTest() {
     }
 
     @Test
+    fun testArithmetic() {
+        assertGccAndJavaExecutionAreEquals(
+            """
+            #include <stdio.h>
+            #include <stdlib.h>
+            #include <time.h>
+            #include <math.h>
+
+            typedef int i32;
+            typedef unsigned int u32;
+            typedef long long int i64;
+            typedef unsigned long long int u64;
+            typedef float f32;
+            typedef double f64;
+
+            static i32 int_values1[] = {-2147483648, -1000, -7, -2, -1, 0, +1, +2, +7, +1000, 2147483647};
+            static i32 int_values2[] = {-1000, -7, -2, -1, +1, +2, +7, +1000};
+
+            static u32 u32_values1[] = {0, +1, +2, +7, +1000, 2147483647, 2147483648, 0xFFFFFFFF};
+            static u32 u32_values2[] = {+1, +2, +7, +1000, +999999};
+
+            static i64 long_values1[] = {-9223372036854775808LL, -2147483648, -1000, -7, -2, -1, 0, +1, +2, +7, +1000, 2147483647, 9223372036854775807LL};
+            static i64 long_values2[] = {-1000, -7, -2, -1, +1, +2, +7, +1000};
+
+            static u64 u64_values1[] = {0, +1, +2, +7, +1000, 2147483647, 9223372036854775807LL, 0xFFFFFFFFFFFFFFFFL};
+            static u64 u64_values2[] = {+1, +2, +7, +1000};
+
+            static f32 float_values1[] = {-2147483648.f, -1000.f, -7.f, -2.f, -1.f, 0.f, 1.f, 2.f, 7.f, 1000.f, 2147483647.f};
+            static f32 float_values2[] = {-1000.f, -7.f, -2.f, -1.f, 1.f, 2.f, 7.f, 1000.f};
+
+            static f64 double_values1[] = {-2147483648.0, -1000.0, -7.0, -2.0, -1.0, 0.0, 1.0, 2.0, 7.0, 1000.0, 2147483647.0};
+            static f64 double_values2[] = {-1000.0, -7.0, -2.0, -1.0, 1.0, 2.0, 7.0, 1000.0};
+
+            #define lengthof(V) (sizeof((V)) / sizeof((V)[0]))
+            #define FOR_INT(VEC, N, V) for (i32 N = 0, V = VEC[N]; N < lengthof(VEC); V = VEC[N++])
+            #define FOR_U32(VEC, N, V) for (u32 N = 0, V = VEC[N]; N < lengthof(VEC); V = VEC[N++])
+            #define FOR_LONG(VEC, N, V) for (i64 N = 0, V = VEC[N]; N < lengthof(VEC); V = VEC[N++])
+            #define FOR_U64(VEC, N, V) for (u64 N = 0, V = VEC[N]; N < lengthof(VEC); V = VEC[N++])
+            #define FOR_FLOAT(VEC, N, V) for (f32 N = 0, V = VEC[(int)N]; N < lengthof(VEC); V = VEC[(int)(N++)])
+            #define FOR_DOUBLE(VEC, N, V) for (f64 N = 0, V = VEC[(int)N]; N < lengthof(VEC); V = VEC[(int)(N++)])
+
+            #define INT_UNOP(VEC, OP) printf("%s", "INT[" #OP "]:" ); FOR_INT(VEC, n, v) printf("%d,", OP); printf("\n");
+            #define INT_BINOP(VEC, OP) printf("%s", "INT[" #OP "]:" ); FOR_INT(VEC, n, l) FOR_INT(VEC, m, r) printf("%d,", OP); printf("\n");
+            #define INT_BINOP_bool(VEC, OP) printf("%s", "INT[" #OP "]:" ); FOR_INT(VEC, n, l) FOR_INT(VEC, m, r) printf("%d,", (OP) ? 1 : 0); printf("\n");
+
+            #define U32_UNOP(VEC, OP) printf("%s", "U32[" #OP "]:" ); FOR_U32(VEC, n, v) printf("%u,", OP); printf("\n");
+            #define U32_BINOP(VEC, OP) printf("%s", "U32[" #OP "]:" ); FOR_U32(VEC, n, l) FOR_U32(VEC, m, r) printf("%u,", OP); printf("\n");
+            #define U32_BINOP_bool(VEC, OP) printf("%s", "U32[" #OP "]:" ); FOR_U32(VEC, n, l) FOR_U32(VEC, m, r) printf("%u,", (OP) ? 1 : 0); printf("\n");
+
+            #define LONG_UNOP(VEC, OP) printf("%s", "LONG[" #OP "]:" ); FOR_LONG(VEC, n, v) printf("%lld,", OP); printf("\n");
+            #define LONG_BINOP(VEC, OP) printf("%s", "LONG[" #OP "]:" ); FOR_LONG(VEC, n, l) FOR_LONG(VEC, m, r) printf("%lld,", OP); printf("\n");
+            #define LONG_BINOP_bool(VEC, OP) printf("%s", "LONG[" #OP "]:" ); FOR_LONG(VEC, n, l) FOR_LONG(VEC, m, r) printf("%d,", (OP) ? 1 : 0); printf("\n");
+
+            #define U64_UNOP(VEC, OP) printf("%s", "U64[" #OP "]:" ); FOR_U64(VEC, n, v) printf("%llu,", OP); printf("\n");
+            #define U64_BINOP(VEC, OP) printf("%s", "U64[" #OP "]:" ); FOR_U64(VEC, n, l) FOR_U64(VEC, m, r) printf("%llu,", OP); printf("\n");
+            #define U64_BINOP_bool(VEC, OP) printf("%s", "U64[" #OP "]:" ); FOR_U64(VEC, n, l) FOR_U64(VEC, m, r) printf("%u,", (OP) ? 1 : 0); printf("\n");
+
+            #define FLOAT_UNOP(VEC, OP) printf("%s", "FLOAT[" #OP "]:" ); FOR_FLOAT(VEC, n, v) printf("%f,", (double)(OP)); printf("\n");
+            #define FLOAT_BINOP(VEC, OP) printf("%s", "FLOAT[" #OP "]:" ); FOR_FLOAT(VEC, n, l) FOR_FLOAT(VEC, m, r) printf("%f,", (double)(OP)); printf("\n");
+            #define FLOAT_BINOP_bool(VEC, OP) printf("%s", "FLOAT[" #OP "]:" ); FOR_FLOAT(VEC, n, l) FOR_FLOAT(VEC, m, r) printf("%d,", (OP) ? 1 : 0); printf("\n");
+
+            #define DOUBLE_UNOP(VEC, OP) printf("%s", "DOUBLE[" #OP "]:" ); FOR_DOUBLE(VEC, n, v) printf("%f,", (double)(OP)); printf("\n");
+            #define DOUBLE_BINOP(VEC, OP) printf("%s", "DOUBLE[" #OP "]:" ); FOR_DOUBLE(VEC, n, l) FOR_DOUBLE(VEC, m, r) printf("%f,", (double)(OP)); printf("\n");
+            #define DOUBLE_BINOP_bool(VEC, OP) printf("%s", "DOUBLE[" #OP "]:" ); FOR_DOUBLE(VEC, n, l) FOR_DOUBLE(VEC, m, r) printf("%d,", (OP) ? 1 : 0); printf("\n");
+
+            int main() {
+                int* data = malloc(sizeof(int) * 1024);
+                { for (int n = 0; n < 1024; n++) data[n] = n * 3; }
+
+                INT_UNOP (int_values1, v)
+                INT_UNOP (int_values1, ~v)
+                INT_UNOP (int_values1, -v)
+                INT_BINOP(int_values1, l + r)
+                INT_BINOP(int_values1, l - r)
+                INT_BINOP(int_values1, l * r)
+                INT_BINOP(int_values2, l / r)
+                INT_BINOP(int_values2, l % r)
+                INT_BINOP(int_values1, l & r)
+                INT_BINOP(int_values1, l ^ r)
+                INT_BINOP(int_values1, l | r)
+                INT_BINOP(int_values1, l << r)
+                INT_BINOP(int_values1, l >> r)
+                INT_BINOP_bool(int_values1, l == r)
+                INT_BINOP_bool(int_values1, l != r)
+                INT_BINOP_bool(int_values1, l < r)
+                INT_BINOP_bool(int_values1, l > r)
+                INT_BINOP_bool(int_values1, l <= r)
+                INT_BINOP_bool(int_values1, l >= r)
+
+                U32_UNOP (u32_values1, v)
+                U32_UNOP (u32_values1, ~v)
+                U32_UNOP (u32_values1, -v)
+                U32_BINOP(u32_values1, l + r)
+                U32_BINOP(u32_values1, l - r)
+                U32_BINOP(u32_values1, l * r)
+                U32_BINOP(u32_values2, l / r)
+                U32_BINOP(u32_values2, l % r)
+                U32_BINOP(u32_values1, l & r)
+                U32_BINOP(u32_values1, l ^ r)
+                U32_BINOP(u32_values1, l | r)
+                U32_BINOP(u32_values1, l << r)
+                U32_BINOP(u32_values1, l >> r)
+                U32_BINOP_bool(u32_values1, l == r)
+                U32_BINOP_bool(u32_values1, l != r)
+                U32_BINOP_bool(u32_values1, l < r)
+                U32_BINOP_bool(u32_values1, l > r)
+                U32_BINOP_bool(u32_values1, l <= r)
+                U32_BINOP_bool(u32_values1, l >= r)
+
+                LONG_UNOP (long_values1, v)
+                LONG_UNOP (long_values1, ~v)
+                LONG_UNOP (long_values1, -v)
+                LONG_BINOP(long_values1, l + r)
+                LONG_BINOP(long_values1, l - r)
+                LONG_BINOP(long_values1, l * r)
+                LONG_BINOP(long_values2, l / r)
+                LONG_BINOP(long_values2, l % r)
+                LONG_BINOP(long_values1, l & r)
+                LONG_BINOP(long_values1, l ^ r)
+                LONG_BINOP(long_values1, l | r)
+                LONG_BINOP(long_values1, l << r)
+                LONG_BINOP(long_values1, l >> r)
+                LONG_BINOP_bool(long_values1, l == r)
+                LONG_BINOP_bool(long_values1, l != r)
+                LONG_BINOP_bool(long_values1, l < r)
+                LONG_BINOP_bool(long_values1, l > r)
+                LONG_BINOP_bool(long_values1, l <= r)
+                LONG_BINOP_bool(long_values1, l >= r)
+
+                U64_UNOP (u64_values1, v)
+                U64_UNOP (u64_values1, ~v)
+                U64_UNOP (u64_values1, -v)
+                U64_BINOP(u64_values1, l + r)
+                U64_BINOP(u64_values1, l - r)
+                U64_BINOP(u64_values1, l * r)
+                U64_BINOP(u64_values2, l / r)
+                U64_BINOP(u64_values2, l % r)
+                U64_BINOP(u64_values1, l & r)
+                U64_BINOP(u64_values1, l ^ r)
+                U64_BINOP(u64_values1, l | r)
+                U64_BINOP(u64_values1, l << r)
+                U64_BINOP(u64_values1, l >> r)
+                U64_BINOP_bool(u64_values1, l == r)
+                U64_BINOP_bool(u64_values1, l != r)
+                U64_BINOP_bool(u64_values1, l < r)
+                U64_BINOP_bool(u64_values1, l > r)
+                U64_BINOP_bool(u64_values1, l <= r)
+                U64_BINOP_bool(u64_values1, l >= r)
+
+                FLOAT_UNOP (float_values1, v)
+                FLOAT_UNOP (float_values1, -v)
+                //FLOAT_UNOP (float_values1, fabs(v))
+                FLOAT_BINOP(float_values1, l + r)
+                FLOAT_BINOP(float_values1, l - r)
+                FLOAT_BINOP(float_values1, l * r)
+                FLOAT_BINOP(float_values2, l / r)
+                //FLOAT_BINOP(float_values2, l % r)
+                FLOAT_BINOP_bool(float_values1, l == r)
+                FLOAT_BINOP_bool(float_values1, l != r)
+                FLOAT_BINOP_bool(float_values1, l < r)
+                FLOAT_BINOP_bool(float_values1, l > r)
+                FLOAT_BINOP_bool(float_values1, l <= r)
+                FLOAT_BINOP_bool(float_values1, l >= r)
+
+                DOUBLE_UNOP (double_values1, v)
+                DOUBLE_UNOP (double_values1, -v)
+                //DOUBLE_UNOP (double_values1, abs(v)) // BLOCK_EXPR
+                DOUBLE_BINOP(double_values1, l + r)
+                DOUBLE_BINOP(double_values1, l - r)
+                DOUBLE_BINOP(double_values1, l * r)
+                DOUBLE_BINOP(double_values2, l / r)
+                //DOUBLE_BINOP(double_values2, l % r)
+                DOUBLE_BINOP_bool(double_values1, l == r)
+                DOUBLE_BINOP_bool(double_values1, l != r)
+                DOUBLE_BINOP_bool(double_values1, l < r)
+                DOUBLE_BINOP_bool(double_values1, l > r)
+                DOUBLE_BINOP_bool(double_values1, l <= r)
+                DOUBLE_BINOP_bool(double_values1, l >= r)
+
+                printf("DONE\n");
+                return 0;
+            }
+            """,
+            optimization = 0,
+            wast = true
+        )
+    }
+
+    @Test
     @Ignore
     fun testNanoSvg() {
         runBlocking {

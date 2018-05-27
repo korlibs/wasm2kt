@@ -26,6 +26,16 @@
 #define NANOSVGRAST_IMPLEMENTATION
 #include "nanosvgrast.h"
 
+#undef malloc
+void *malloc_hook_example(int size) {
+    printf("malloc_hook_example(%d)\n", size);
+    void *res = malloc(size);
+    printf(" --> %d\n", (int)res);
+    return res;
+}
+
+#define malloc malloc_hook_example
+
 int main()
 {
 	NSVGimage *image = NULL;

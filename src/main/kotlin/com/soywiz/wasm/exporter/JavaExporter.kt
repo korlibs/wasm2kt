@@ -49,21 +49,14 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                         maxMem = Math.max(maxMem, memBase + data.data.size)
                     } else {
                         line("private int computeDataIndex${data.index}()") {
-                            line(
-                                ast.dump(
-                                    DumpContext(
-                                        moduleCtx,
-                                        null
-                                    )
-                                ).indenter
-                            )
+                            line(ast.dump(DumpContext(moduleCtx, null)).indenter)
                         }
                         dataIndices[data.index] = "computeDataIndex${data.index}()"
                     }
                 }
 
-                line("static public final int heapSize = 16 * 1024 * 1024; // 16 MB")
-                line("static public final int stackSize = 32 * 1024; // 32 KB ")
+                line("static public final int heapSize = 64 * 1024 * 1024; // 64 MB")
+                line("static public final int stackSize = 128 * 1024; // 128 KB ")
 
                 line("public java.nio.ByteBuffer heap = java.nio.ByteBuffer.allocate(heapSize).order(java.nio.ByteOrder.nativeOrder());")
 
@@ -157,7 +150,8 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
 
                 line("private int Op_i32_clz(int v) { return java.lang.Integer.numberOfLeadingZeros(v); }")
                 line("private int Op_i32_ctz(int v) { return java.lang.Integer.numberOfTrailingZeros(v); }")
-                line("private int Op_i32_popcnt(int v) { TODO(); return -1; }") // @TODO
+                line("private int Op_i32_popcnt(int v) { return java.lang.Integer.bitCount(v); }")
+
                 line("private int Op_i32_add(int l, int r) { return l + r; }")
                 line("private int Op_i32_sub(int l, int r) { return l - r; }")
                 line("private int Op_i32_mul(int l, int r) { return l * r; }")
@@ -176,7 +170,7 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
 
                 line("private int Op_i64_clz(long v) { return java.lang.Long.numberOfLeadingZeros(v); }")
                 line("private int Op_i64_ctz(long v) { return java.lang.Long.numberOfTrailingZeros(v); }")
-                line("private int Op_i64_popcnt(long v) { TODO(); return -1; }") // @TODO
+                line("private int Op_i64_popcnt(long v) { return java.lang.Long.bitCount(v); }")
                 line("private long Op_i64_add(long l, long r) { return l + r; }")
                 line("private long Op_i64_sub(long l, long r) { return l - r; }")
                 line("private long Op_i64_mul(long l, long r) { return l * r; }")
