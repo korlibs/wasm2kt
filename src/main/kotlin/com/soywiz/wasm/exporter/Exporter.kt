@@ -149,10 +149,14 @@ open class Exporter(val module: WasmModule) {
             is Wast.BLOCK -> {
                 lateinit var result: DumpResult
                 val optLabel = if (label != null) "${ctx.getName(label)}: " else ""
-                out.line("${optLabel}do") {
+                if (optLabel.isEmpty()) {
                     result = this.stm.dump(ctx, out).appendBreaks(breaks)
+                } else {
+                    out.line("${optLabel}do") {
+                        result = this.stm.dump(ctx, out).appendBreaks(breaks)
+                    }
+                    out.line("while (false);")
                 }
-                out.line("while (false);")
                 unreachable = result.unreachable && (label !in breaks)
                 if (ctx.debug) println("BLOCK. ${ctx.func?.name} (block_label=${label?.name}). Unreachable: $unreachable, $breaks")
             }
@@ -244,6 +248,8 @@ open class Exporter(val module: WasmModule) {
     protected open fun const(value: Double) =  "($value)"
     protected open fun unop(op: WasmOp, vd: String) = when (op) {
         WasmOp.Op_f32_neg, WasmOp.Op_f64_neg -> "-($vd)"
+        WasmOp.Op_f64_promote_f32 -> "((double)($vd))"
+        WasmOp.Op_f32_demote_f64 -> "((float)($vd))"
         else -> "$op($vd)"
     }
     protected open fun binop(op: WasmOp, ld: String, rd: String) = when (op) {
@@ -267,8 +273,11 @@ open class Exporter(val module: WasmModule) {
     protected open fun readMemory(op: WasmOp, address: String, offset: Int, align: Int): String {
         val raddr = if (offset != 0) "$address + $offset" else address
         return when (op) {
-            WasmOp.Op_i32_load8_s -> "(int)heap.get($raddr)"
-            WasmOp.Op_i32_load -> "(int)heap.getInt($raddr)"
+            WasmOp.Op_i32_load8_s -> "this.getByte($raddr)"
+            WasmOp.Op_i32_load -> "this.getInt($raddr)"
+            WasmOp.Op_i64_load -> "this.getLong($raddr)"
+            WasmOp.Op_f32_load -> "this.getFloat($raddr)"
+            WasmOp.Op_f64_load -> "this.getDouble($raddr)"
             else -> "$op($address, $offset, $align)"
         }
     }
@@ -276,9 +285,12 @@ open class Exporter(val module: WasmModule) {
     protected open fun writeWriteMemory(op: WasmOp, address: String, offset: Int, align: Int, expr: String): Indenter {
         val raddr = if (offset != 0) "$address + $offset" else address
         return when (op) {
-            WasmOp.Op_i32_store -> Indenter("heap.putInt($raddr, $expr);")
-            WasmOp.Op_i32_store8 -> Indenter("heap.put($raddr, (byte)$expr);")
-            WasmOp.Op_i32_store16 -> Indenter("heap.putShort($raddr, (short)$expr);")
+            WasmOp.Op_i32_store   -> Indenter("this.putInt($raddr, $expr);")
+            WasmOp.Op_i32_store8  -> Indenter("this.putByte($raddr, $expr);")
+            WasmOp.Op_i32_store16 -> Indenter("this.putShort($raddr, $expr);")
+            WasmOp.Op_i64_store   -> Indenter("this.putLong($raddr, $expr);")
+            WasmOp.Op_f32_store   -> Indenter("this.putFloat($raddr, $expr);")
+            WasmOp.Op_f64_store   -> Indenter("this.putDouble($raddr, $expr);")
             else -> Indenter("$op($address, $offset, $align, $expr);")
         }
     }

@@ -22,19 +22,24 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                     val funcName = moduleCtx.getName(mainFunc)
                     line("static public void main(String[] args)") {
                         line("$className module = new $className();")
-                        val mainArity = mainFunc.type.args.size
-                        when (mainArity) {
-                            0 -> line("System.exit(module.$funcName());")
-                            2 -> {
-                                line("int[] array = new int[args.length + 1];")
-                                line("array[0] = module.allocStringz(\"$className\");")
-                                line("for (int n = 1; n < array.length; n++)") {
-                                    line("array[n] = module.allocStringz(args[n - 1]);")
+                        line("int result = 0;")
+                        //line("for (int m = 0; m < 100; m++)") {
+                        run {
+                            val mainArity = mainFunc.type.args.size
+                            when (mainArity) {
+                                0 -> line("result = module.$funcName();")
+                                2 -> {
+                                    line("int[] array = new int[args.length + 1];")
+                                    line("array[0] = module.allocStringz(\"$className\");")
+                                    line("for (int n = 1; n < array.length; n++)") {
+                                        line("array[n] = module.allocStringz(args[n - 1]);")
+                                    }
+                                    line("result = module.$funcName(array.length, module.allocInts(array));")
                                 }
-                                line("System.exit(module.$funcName(array.length, module.allocInts(array)));")
+                                else -> invalidOp("Invalid function main with arity $mainArity")
                             }
-                            else -> invalidOp("Invalid function main with arity $mainArity")
                         }
+                        line("System.exit(result);")
                     }
                 }
 
@@ -80,6 +85,20 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("private int lhu(int address) { return Op_i32_load16_u(address, 0, 1); }")
                 line("private int lw(int address) { return Op_i32_load(address, 0, 2); }")
                 line("private long ldw(int address) { return Op_i64_load(address, 0, 3); }")
+
+                line("private int getByte(int a) { return (int)heap.get(a); }")
+                line("private int getShort(int a) { return (int)heap.getShort(a); }")
+                line("private int getInt(int a) { return heap.getInt(a); }")
+                line("private long getLong(int a) { return heap.getLong(a); }")
+                line("private float getFloat(int a) { return heap.getFloat(a); }")
+                line("private double getDouble(int a) { return heap.getDouble(a); }")
+
+                line("private void putByte(int a, int v) { heap.put(a, (byte)v); }")
+                line("private void putShort(int a, int v) { heap.putShort(a, (short)v); }")
+                line("private void putInt(int a, int v) { heap.putInt(a, v); }")
+                line("private void putLong(int a, long v) { heap.putLong(a, v); }")
+                line("private void putFloat(int a, float v) { heap.putFloat(a, v); }")
+                line("private void putDouble(int a, double v) { heap.putDouble(a, v); }")
 
                 line("private int Op_i32_load(int address, int offset, int align) { return heap.getInt(checkAddressRead(address, offset, align, 4)); }")
                 line("private long Op_i64_load(int address, int offset, int align) { return heap.getLong(checkAddressRead(address, offset, align, 8)); }")
@@ -552,8 +571,7 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 getImportFunc("env", "___lock")?.let { line("void $it(int addr) {}") }
                 getImportFunc("env", "___unlock")?.let { line("void $it(int addr) {}") }
 
-                //getImportFunc("env", "_emscripten_memcpy_big")?.let { line("int $it(int dst, int src, int count) { for (int n = 0; n < count; n++) sb(dst + n, lbu(src + n)); throw new RuntimeException(java.lang.String.format(\"%d,%d,%d\", dst, src, count)); }") }
-                getImportFunc("env", "_emscripten_memcpy_big")?.let { line("int $it(int dst, int src, int count) { for (int n = 0; n < count; n++) sb(dst + n, lbu(src + n)); return dst; }") }
+                getImportFunc("env", "_emscripten_memcpy_big")?.let { line("int $it(int dst, int src, int count) { System.arraycopy(heapBytes, src, heapBytes, dst, count); return dst; }") }
                 getImportFunc("env", "___setErrNo")?.let { line("void $it(int errno) {}") }
 
                 for (func in functionsWithImport) {
