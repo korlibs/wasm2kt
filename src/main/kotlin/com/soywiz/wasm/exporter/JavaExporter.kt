@@ -275,20 +275,20 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
             val arg = func.type.args
             line("$visibility${func.type.retType.type()} ${moduleCtx.getName(func)}($args)") {
                 when (func.name) {
-                    //"\$_memmove", "\$_memcpy" -> {
-                    //    val dst = ctx.getName(arg[0])
-                    //    val src = ctx.getName(arg[1])
-                    //    val count = ctx.getName(arg[2])
-                    //    line("System.arraycopy(heapBytes, $src, heapBytes, $dst, $count);")
-                    //    line("return $dst;")
-                    //}
-                    //"\$_memset" -> {
-                    //    val ptr = ctx.getName(arg[0])
-                    //    val value = ctx.getName(arg[1])
-                    //    val num = ctx.getName(arg[2])
-                    //    line("java.util.Arrays.fill(heapBytes, $ptr, $ptr + $num, (byte)$value);")
-                    //    line("return $ptr;")
-                    //}
+                    "\$_memmove", "\$_memcpy" -> {
+                        val dst = ctx.getName(arg[0])
+                        val src = ctx.getName(arg[1])
+                        val count = ctx.getName(arg[2])
+                        line("System.arraycopy(heapBytes, $src, heapBytes, $dst, $count);")
+                        line("return $dst;")
+                    }
+                    "\$_memset" -> {
+                        val ptr = ctx.getName(arg[0])
+                        val value = ctx.getName(arg[1])
+                        val num = ctx.getName(arg[2])
+                        line("java.util.Arrays.fill(heapBytes, $ptr, $ptr + $num, (byte)$value);")
+                        line("return $ptr;")
+                    }
                     else -> {
                         val argsSet = func.type.args.toSet()
                         for (local in bodyAst.getLocals()) {
