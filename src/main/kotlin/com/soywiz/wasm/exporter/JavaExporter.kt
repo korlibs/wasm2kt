@@ -110,52 +110,36 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 "Infinity"
             )?.let { line("double $it = java.lang.Double.POSITIVE_INFINITY;") }
 
-            getImportFunc("env", "getTotalMemory")?.let { line("int $it() { return heap.limit(); }") }
-            getImportFunc("env", "enlargeMemory")?.let { line("int $it() { throw new RuntimeException(); }") }
-            getImportFunc("env", "abortOnCannotGrowMemory")
-                ?.let { line("void $it() { throw new RuntimeException(\"abortOnCannotGrowMemory\"); }") }
+            ifunc("global.Math", "pow", "double", "double a, double b") { line("return java.lang.Math.pow(a, b);") }
 
-            getImportFunc("env", "abortStackOverflow")
-                ?.let { line("void $it(int arg) { throw new RuntimeException(\"abortStackOverflow\"); }") }
-
-            getImportFunc("env", "abort")
-                ?.let { line("void $it(int v) { throw new RuntimeException(\"ABORT \" + v); }") }
-            getImportFunc(
-                "env",
-                "_abort"
-            )?.let { line("void $it() { throw new RuntimeException(\"ABORT\"); }") }
-
-            getImportFunc(
-                "global.Math",
-                "pow"
-            )?.let { line("double $it(double a, double b) { return java.lang.Math.pow(a, b); }") }
-            getImportFunc("env", "nullFunc_i")?.let { line("int $it(int v) { return 0; }") }
-            getImportFunc("env", "nullFunc_ii")?.let { line("int $it(int v) { return 0; }") }
-            getImportFunc("env", "nullFunc_iii")?.let { line("int $it(int a) { return 0; }") }
-            getImportFunc("env", "nullFunc_iiii")?.let { line("int $it(int a) { return 0; }") }
-            getImportFunc("env", "nullFunc_v")?.let { line("int $it(int a) { return 0; }") }
-            getImportFunc("env", "nullFunc_vi")?.let { line("int $it(int a) { return 0; }") }
-            getImportFunc("env", "nullFunc_vii")?.let { line("int $it(int a) { return 0; }") }
-            getImportFunc("env", "nullFunc_viii")?.let { line("int $it(int a) { return 0; }") }
-
-            getImportFunc("env", "_exit")?.let { line("void $it(int code) { System.exit(code); }") }
-
-            getImportFunc(
-                "env",
-                "___assert_fail"
-            )?.let { line("void $it(int a, int b, int c, int d) { throw new RuntimeException(\"___assert_fail \"); }") }
-
-            getImportFunc("env", "___lock")?.let { line("void $it(int addr) {}") }
-            getImportFunc("env", "___unlock")?.let { line("void $it(int addr) {}") }
-
-            getImportFunc(
-                "env",
-                "_emscripten_memcpy_big"
-            )?.let { line("int $it(int dst, int src, int count) { System.arraycopy(heapBytes, src, heapBytes, dst, count); return dst; }") }
-            getImportFunc("env", "___setErrNo")?.let { line("void $it(int errno) {}") }
-
-            getImportFunc("env", "_time")
-                ?.let { line("int $it(int addr) { int time = (int)(System.currentTimeMillis() / 1000L); if (addr != 0) sw(addr, time); return time; }") }
+            ifunc("env", "getTotalMemory", "int", "") { line("""return heap.limit();""") }
+            ifunc("env", "enlargeMemory", "int", "") { line("""return TODO_i32("enlargeMemory");""") }
+            ifunc("env", "abortOnCannotGrowMemory", "void", "") { line("""TODO("abortOnCannotGrowMemory");""") }
+            ifunc("env", "abortStackOverflow", "void", "int arg") { line("""TODO("abortStackOverflow");""") }
+            ifunc("env", "abort", "void", "int v") { line("""TODO("ABORT: " + v);""") }
+            ifunc("env", "_abort", "void", "") { line("TODO(\"ABORT\");") }
+            ifunc("env", "nullFunc_i", "int", "int v") { line("return 0;") }
+            ifunc("env", "nullFunc_ii", "int", "int v") { line("return 0;") }
+            ifunc("env", "nullFunc_iii", "int", "int v") { line("return 0;") }
+            ifunc("env", "nullFunc_iiii", "int", "int v") { line("return 0;") }
+            ifunc("env", "nullFunc_v", "int", "int v") { line("return 0;") }
+            ifunc("env", "nullFunc_vi", "int", "int v") { line("return 0;") }
+            ifunc("env", "nullFunc_vii", "int", "int v") { line("return 0;") }
+            ifunc("env", "nullFunc_viii", "int", "int v") { line("return 0;") }
+            ifunc("env", "_exit", "void", "int code") { line("System.exit(code);") }
+            ifunc("env", "___assert_fail", "void", "int a, int b, int c, int d") { line("TODO(\"___assert_fail\");") }
+            ifunc("env", "___lock", "void", "int addr") { line("") }
+            ifunc("env", "___unlock", "void", "int addr") { line("") }
+            ifunc("env", "_emscripten_memcpy_big", "int", "int dst, int src, int count") {
+                line("System.arraycopy(heapBytes, src, heapBytes, dst, count);")
+                line("return dst;")
+            }
+            ifunc("env", "___setErrNo", "void", "int errno") { line("") }
+            ifunc("env", "_time", "int", "int addr") {
+                line("int time = (int)(System.currentTimeMillis() / 1000L);")
+                line("if (addr != 0) sw(addr, time);")
+                line("return time;")
+            }
 
             line("public void putBytes(int address, byte[] bytes, int offset, int size) {")
             line("    heap.position(address);")
@@ -226,14 +210,15 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                         else -> TODO("Both ${global::e.name} and ${global::ast.name} are null")
                     }
                     val ctx = DumpContext(moduleCtx, null)
-                    if (ast is Wast.RETURN) {
-                        line("${global.globalType.type.type()} ${moduleCtx.getName(global)} = ${ast.expr.dump(ctx)};")
+                    val value = if (ast is Wast.RETURN) {
+                        ast.expr.dump(ctx)
                     } else {
                         line("private ${global.globalType.type.type()} $computeName()") {
                             line(ast.dump(ctx).indenter)
                         }
-                        line("${global.globalType.type.type()} ${moduleCtx.getName(global)} = $computeName();")
+                        "$computeName()"
                     }
+                    line("${global.globalType.type.type()} ${moduleCtx.getName(global)} = $value;")
                 }
             }
 
@@ -243,11 +228,12 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
 
             for ((type, functions) in module.functions.groupBy { it.type.withoutArgNames() }) {
                 val ctx = DumpContext(moduleCtx, WasmFunc(-1, WasmType.Function(listOf(), listOf())))
-                val args = type.args.map { "${it.type.type()} ${ctx.getName(it)}" }.joinToString(", ")
+                val args = type.args.map { "${it.type.type()} ${ctx.getName(it)}" }
                 val argsCall = type.args.withIndex().map { ctx.getName(it.value) }.joinToString(", ")
                 val rfuncs = functions.map { it to funcToIndices[it] }.filter { it.second != null }
-                val argsWithIndex = if (args.isEmpty()) "int index" else "int index, $args"
+                val argsWithIndex = (listOf("int index") + args).joinToString(", ")
                 if (rfuncs.isNotEmpty()) {
+                //run {
                     line("private ${type.retType.type()} invoke_${type.signature}($argsWithIndex)") {
                         line("switch (index)") {
                             for ((func, funcIndices) in rfuncs) {
@@ -272,6 +258,13 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
         }
     }
 
+    fun Indenter.ifunc(ns: String, name: String, ret: String, args: String, callback: Indenter.() -> Unit) {
+        getImportFunc(ns, name)?.let {
+            line("$ret $it($args)") {
+                callback()
+            }
+        }
+    }
 
     fun dump(func: WasmFunc): Indenter = Indenter {
         val bodyAst = func.getAst(module)
@@ -279,15 +272,34 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
             val visibility = if (func.export != null) "public " else "private "
             val ctx = DumpContext(moduleCtx, func)
             val args = func.type.args.joinToString(", ") { "${it.type.type()} " + ctx.getName(it) + "" }
+            val arg = func.type.args
             line("$visibility${func.type.retType.type()} ${moduleCtx.getName(func)}($args)") {
-                val argsSet = func.type.args.toSet()
-                for (local in bodyAst.getLocals()) {
-                    if (local in argsSet) continue
-                    line("${local.type.type()} ${ctx.getName(local)} = ${local.type.default()};")
+                when (func.name) {
+                    //"\$_memmove", "\$_memcpy" -> {
+                    //    val dst = ctx.getName(arg[0])
+                    //    val src = ctx.getName(arg[1])
+                    //    val count = ctx.getName(arg[2])
+                    //    line("System.arraycopy(heapBytes, $src, heapBytes, $dst, $count);")
+                    //    line("return $dst;")
+                    //}
+                    //"\$_memset" -> {
+                    //    val ptr = ctx.getName(arg[0])
+                    //    val value = ctx.getName(arg[1])
+                    //    val num = ctx.getName(arg[2])
+                    //    line("java.util.Arrays.fill(heapBytes, $ptr, $ptr + $num, (byte)$value);")
+                    //    line("return $ptr;")
+                    //}
+                    else -> {
+                        val argsSet = func.type.args.toSet()
+                        for (local in bodyAst.getLocals()) {
+                            if (local in argsSet) continue
+                            line("${local.type.type()} ${ctx.getName(local)} = ${local.type.default()};")
+                        }
+                        val res = bodyAst.dump(ctx)
+                        for (phi in ctx.phiTypes) line("${phi.type()} phi_$phi = ${phi.default()};")
+                        line(res.indenter)
+                    }
                 }
-                val res = bodyAst.dump(ctx)
-                for (phi in ctx.phiTypes) line("${phi.type()} phi_$phi = ${phi.default()};")
-                line(res.indenter)
             }
         }
     }
@@ -409,7 +421,14 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
 
     override fun writeOps(i: Indenter): Unit = i.run {
         line("private int b2i(boolean v) { return v ? 1 : 0; }")
+
         line("private void TODO() { throw new RuntimeException(); }")
+        line("private int TODO_i32() { throw new RuntimeException(); }")
+        line("private long TODO_i64() { throw new RuntimeException(); }")
+        line("private float TODO_f32() { throw new RuntimeException(); }")
+        line("private double TODO_f64() { throw new RuntimeException(); }")
+
+        line("private void TODO(String reason) { throw new RuntimeException(reason); }")
         line("private int TODO_i32(String reason) { throw new RuntimeException(reason); }")
         line("private long TODO_i64(String reason) { throw new RuntimeException(reason); }")
         line("private float TODO_f32(String reason) { throw new RuntimeException(reason); }")
