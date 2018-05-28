@@ -4,10 +4,22 @@ interface WasmType {
     val id: Int
     val signature: String
 
+    class _ARRAY(val element: WasmType) : WasmType {
+        override val id = -1
+        override fun toString() = "$element[]"
+        override val signature: String = "[${element.signature}"
+    }
+
     object void : WasmType {
         override val id = 0
         override fun toString() = "void"
         override val signature: String = "v"
+    }
+
+    object _boolean : WasmType {
+        override val id = -1
+        override fun toString() = "boolean"
+        override val signature: String = "z"
     }
 
     object _i8 : WasmType {
