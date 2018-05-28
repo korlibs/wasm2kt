@@ -1,4 +1,4 @@
-package com.soywiz.wasm
+package com.soywiz.wasm.util
 
 object INDENTS {
     private val INDENTS = arrayListOf<String>("")
@@ -16,7 +16,7 @@ object INDENTS {
     }
 }
 
-class Indenter(private val actions: ArrayList<Action> = arrayListOf<Indenter.Action>()) {
+class Indenter(private val actions: ArrayList<Action> = arrayListOf<Action>()) {
     interface Action {
         interface Text : Action {
             val str: String
@@ -25,7 +25,8 @@ class Indenter(private val actions: ArrayList<Action> = arrayListOf<Indenter.Act
         data class Marker(val data: Any) : Action
         data class Inline(override val str: String) : Text
         data class Line(override val str: String) : Text
-        data class LineDeferred(val callback: () -> Indenter) : Action
+        data class LineDeferred(val callback: () -> Indenter) :
+            Action
         object Indent : Action
         object Unindent : Action
     }
@@ -35,7 +36,7 @@ class Indenter(private val actions: ArrayList<Action> = arrayListOf<Indenter.Act
     companion object {
         fun genString(init: Indenter.() -> Unit) = gen(init).toString()
 
-        val EMPTY = Indenter.gen { }
+        val EMPTY = gen { }
 
         inline fun gen(init: Indenter.() -> Unit): Indenter {
             val indenter = Indenter()
@@ -43,10 +44,13 @@ class Indenter(private val actions: ArrayList<Action> = arrayListOf<Indenter.Act
             return indenter
         }
 
-        fun single(str: String): Indenter = Indenter(arrayListOf(Action.Line(str)))
+        fun single(str: String): Indenter =
+            Indenter(arrayListOf(Action.Line(str)))
 
-        inline operator fun invoke(init: Indenter.() -> Unit): Indenter = gen(init)
-        operator fun invoke(str: String): Indenter = single(str)
+        inline operator fun invoke(init: Indenter.() -> Unit): Indenter =
+            gen(init)
+        operator fun invoke(str: String): Indenter =
+            single(str)
 
         fun replaceString(templateString: String, replacements: Map<String, String>): String {
             val pattern = Regex("\\$(\\w+)")

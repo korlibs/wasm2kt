@@ -3,7 +3,8 @@ package com.soywiz.wasm.exporter
 import com.soywiz.korio.error.*
 import com.soywiz.korio.util.*
 import com.soywiz.wasm.*
-import com.soywiz.wasm.Indenter
+import com.soywiz.wasm.util.Indenter
+import com.soywiz.wasm.util.*
 import java.util.*
 
 data class ExportConfig(
@@ -41,6 +42,12 @@ open class Exporter(val module: WasmModule) {
             override fun toString() = name
         }
         fun arrayType(type: WasmType) = WasmType._ARRAY(type)
+        fun VARARG(type: WasmType) = WasmType._VARARG(type)
+        val THROWABLE = type("Throwable")
+        val RTEXCEPTION = type("RuntimeException")
+        val SBUILDER = type("StringBuilder")
+        val STR = type("String")
+        val CHARSET = type("java.nio.charset.Charset")
         val BA = arrayType(WasmType._i8)
         val IA = arrayType(WasmType.i32)
         val bool = WasmType._boolean
@@ -48,6 +55,8 @@ open class Exporter(val module: WasmModule) {
         val long = WasmType.i64
         val float = WasmType.f32
         val double = WasmType.f64
+        val FILE = type("java.io.File")
+        val RAFILE = type("java.io.RandomAccessFile")
     }
 
     open val DEFINED_NAMES = JAVA_DEFINED_NAMES
@@ -68,7 +77,7 @@ open class Exporter(val module: WasmModule) {
     val globalsWithImport = module.globals.filter { it.import != null }
     val globalsByImport = globalsWithImport.map { it.import!!.importPair to it }.toMap()
 
-    val handledGlobalsWithImport = LinkedHashSet<Wasm.WasmGlobal>()
+    val handledGlobalsWithImport = LinkedHashSet<WasmGlobal>()
 
     val STACKTOP by lazy {getImportGlobal("env", "STACKTOP") ?: "STACKTOP" }
     val STACK_MAX by lazy {getImportGlobal("env", "STACK_MAX") ?: "STACK_MAX" }
@@ -100,9 +109,10 @@ open class Exporter(val module: WasmModule) {
 
     inline fun Indenter.unop(op: WasmOp, arg: WasmType, ret: WasmType, expr: () -> String) = unop(op, arg, ret, expr())
 
-    open fun Indenter.binop(op: WasmOp, arg: WasmType, ret: WasmType, expr: String) = FUNC("$op", ret, arg("l"), arg("r")) { expr }
-    open fun Indenter.unop(op: WasmOp, arg: WasmType, ret: WasmType, expr: String) = FUNC("$op", ret, arg("v")) { expr }
+    open fun Indenter.binop(op: WasmOp, arg: WasmType, ret: WasmType, expr: String) = FUNC_INLINE("$op", ret, arg("l"), arg("r")) { expr }
+    open fun Indenter.unop(op: WasmOp, arg: WasmType, ret: WasmType, expr: String) = FUNC_INLINE("$op", ret, arg("v")) { expr }
 
+    fun terop(op: WasmOp, cond: String, strue: String, sfalse: String) = ternary(cond, strue, sfalse)
     open fun ternary(cond: String, strue: String, sfalse: String) = "(($cond) ? ($strue) : ($sfalse))"
     open fun cast(type: WasmType, expr: String) = "((${type.type()})($expr))"
     open val AND = "&"
@@ -110,44 +120,46 @@ open class Exporter(val module: WasmModule) {
     open val XOR = "^"
     open val SHL = "<<"
     open val SHR = ">>"
-    open val SHRU = ">>>"
+    open val USHR = ">>>"
 
     protected open fun Indenter.writeImportedFuncs() {
         iglob("global", "NaN", double) { "java.lang.Double.NaN" }
         iglob("global", "Infinity", double) { "java.lang.Double.POSITIVE_INFINITY" }
-        ifunc("global.Math", "pow", double, double("a"), double("b")) { line("return java.lang.Math.pow(a, b);") }
+        ifunc("global.Math", "pow", double, double("a"), double("b")) { RETURN("java.lang.Math.pow(a, b)") }
 
         iglob("env", "tableBase", int) { "0" }
         iglob("env", "ABORT", int) { "-1" }
-        ifunc("env", "getTotalMemory", int) { line("""return heap.limit();""") }
-        ifunc("env", "enlargeMemory", int) { line("""return TODO_i32("enlargeMemory");""") }
+        ifunc("env", "getTotalMemory", int) { RETURN("heap.limit()") }
+        ifunc("env", "enlargeMemory", int) { RETURN("""TODO_i32("enlargeMemory")""") }
         ifunc("env", "abortOnCannotGrowMemory", void) { line("""TODO("abortOnCannotGrowMemory");""") }
         ifunc("env", "abortStackOverflow", void, int("arg")) { line("""TODO("abortStackOverflow");""") }
         ifunc("env", "abort", void, int("v")) { line("""TODO("ABORT: " + v);""") }
         ifunc("env", "_abort", void) { line("TODO(\"ABORT\");") }
-        ifunc("env", "nullFunc_i", int, int("v")) { line("return 0;") }
-        ifunc("env", "nullFunc_ii", int, int("v")) { line("return 0;") }
-        ifunc("env", "nullFunc_iii", int, int("v")) { line("return 0;") }
-        ifunc("env", "nullFunc_iiii", int, int("v")) { line("return 0;") }
-        ifunc("env", "nullFunc_v", int, int("v")) { line("return 0;") }
-        ifunc("env", "nullFunc_vi", int, int("v")) { line("return 0;") }
-        ifunc("env", "nullFunc_vii", int, int("v")) { line("return 0;") }
-        ifunc("env", "nullFunc_viii", int, int("v")) { line("return 0;") }
+        ifunc("env", "nullFunc_i", int, int("v")) { RETURN("0") }
+        ifunc("env", "nullFunc_ii", int, int("v")) { RETURN("0") }
+        ifunc("env", "nullFunc_iii", int, int("v")) { RETURN("0") }
+        ifunc("env", "nullFunc_iiii", int, int("v")) { RETURN("0") }
+        ifunc("env", "nullFunc_v", int, int("v")) { RETURN("0") }
+        ifunc("env", "nullFunc_vi", int, int("v")) { RETURN("0") }
+        ifunc("env", "nullFunc_vii", int, int("v")) { RETURN("0") }
+        ifunc("env", "nullFunc_viii", int, int("v")) { RETURN("0") }
         ifunc("env", "___assert_fail", void, int("a"), int("b"), int("c"), int("d")) {
-            line("TODO(\"___assert_fail\");")
+            STM_EXPR("TODO(\"___assert_fail\")")
         }
         ifunc("env", "___lock", void, int("addr")) { line("") }
         ifunc("env", "___unlock", void, int("addr")) { line("") }
         ifunc("env", "_emscripten_memcpy_big", int, int("dst"), int("src"), int("count")) {
-            line("System.arraycopy(heapBytes, src, heapBytes, dst, count);")
-            line("return dst;")
+            STM_EXPR("System.arraycopy(heapBytes, src, heapBytes, dst, count)")
+            RETURN("dst")
         }
         ifunc("env", "___setErrNo", void, int("error")) { line("") }
         ifunc("env", "_exit", void, int("code")) { line("System.exit(code);") }
         ifunc("env", "_time", int, int("addr")) {
-            line("int time = (int)(System.currentTimeMillis() / 1000L);")
-            line("if (addr != 0) sw(addr, time);")
-            line("return time;")
+            LOCAL(int("time"), "(System.currentTimeMillis() / 1000L)".cint)
+            IF("addr != 0") {
+                STM_EXPR("sw(addr, time)")
+            }
+            RETURN("time")
         }
 
         for (func in functionsWithImport - handledFunctionsWithImport) {
@@ -162,15 +174,15 @@ open class Exporter(val module: WasmModule) {
         iopr(WasmOp.Op_f64_load, double) { "heap.getDouble(checkARead(address, offset, align, 8))" }
 
         iopr(WasmOp.Op_i32_load8_s, int) { "heap.get(checkARead(address, offset, align, 1))".cint }
-        iopr(WasmOp.Op_i32_load8_u, int) { "heap.get(checkARead(address, offset, align, 1)) $AND 0xFF".cint }
+        iopr(WasmOp.Op_i32_load8_u, int) { "${"heap.get(checkARead(address, offset, align, 1))".cint} $AND 0xFF" }
         iopr(WasmOp.Op_i32_load16_s, int) { "heap.getShort(checkARead(address, offset, align, 2))".cint }
-        iopr(WasmOp.Op_i32_load16_u, int) { "heap.getShort(checkARead(address, offset, align, 2)) $AND 0xFFFF".cint }
+        iopr(WasmOp.Op_i32_load16_u, int) { "${"heap.getShort(checkARead(address, offset, align, 2))".cint} $AND 0xFFFF" }
         iopr(WasmOp.Op_i64_load8_s, long) { "heap.get(checkARead(address, offset, align, 1))".clong }
-        iopr(WasmOp.Op_i64_load8_u, long) { "heap.get(checkARead(address, offset, align, 1)) $AND 0xFFL".clong }
+        iopr(WasmOp.Op_i64_load8_u, long) { "${"heap.get(checkARead(address, offset, align, 1))".clong} $AND 0xFFL" }
         iopr(WasmOp.Op_i64_load16_s, long) { "heap.getShort(checkARead(address, offset, align, 2))".clong }
-        iopr(WasmOp.Op_i64_load16_u, long) { "heap.getShort(checkARead(address, offset, align, 2)) $AND 0xFFFFL".clong }
+        iopr(WasmOp.Op_i64_load16_u, long) { "${"heap.getShort(checkARead(address, offset, align, 2))".clong} $AND 0xFFFFL" }
         iopr(WasmOp.Op_i64_load32_s, long) { "heap.getInt(checkARead(address, offset, align, 4))".clong }
-        iopr(WasmOp.Op_i64_load32_u, long) { "heap.getInt(checkARead(address, offset, align, 4)) $AND 0xFFFFFFFFL".clong }
+        iopr(WasmOp.Op_i64_load32_u, long) { "${"heap.getInt(checkARead(address, offset, align, 4))".clong} $AND 0xFFFFFFFFL" }
 
         iopw(WasmOp.Op_i32_store8, int) { "heap.put(checkAWrite(address, offset, align, 1), ${"value".cbyte});" }
         iopw(WasmOp.Op_i32_store16, int) { "heap.putShort(checkAWrite(address, offset, align, 2), ${"value".cshort});" }
@@ -238,7 +250,7 @@ open class Exporter(val module: WasmModule) {
         binop_int(WasmOp.Op_i32_xor) { "l $XOR r" }
         binop_int(WasmOp.Op_i32_shl) { "l $SHL r" }
         binop_int(WasmOp.Op_i32_shr_s) { "l $SHR r" }
-        binop_int(WasmOp.Op_i32_shr_u) { "l $SHRU r" }
+        binop_int(WasmOp.Op_i32_shr_u) { "l $USHR r" }
         binop_int(WasmOp.Op_i32_rotl) { "java.lang.Integer.rotateLeft(l, r)" }
         binop_int(WasmOp.Op_i32_rotr) { "java.lang.Integer.rotateRight(l, r)" }
 
@@ -256,9 +268,9 @@ open class Exporter(val module: WasmModule) {
         binop_long(WasmOp.Op_i64_and) { "l $AND r" }
         binop_long(WasmOp.Op_i64_or) { "l $OR r" }
         binop_long(WasmOp.Op_i64_xor) { "l $XOR r" }
-        binop_long(WasmOp.Op_i64_shl) { "l $SHL r" }
-        binop_long(WasmOp.Op_i64_shr_s) { "l $SHR r" }
-        binop_long(WasmOp.Op_i64_shr_u) { "l $SHRU r" }
+        binop_long(WasmOp.Op_i64_shl) { "l $SHL ${"r".cint}" }
+        binop_long(WasmOp.Op_i64_shr_s) { "l $SHR ${"r".cint}" }
+        binop_long(WasmOp.Op_i64_shr_u) { "l $USHR ${"r".cint}" }
         binop_long(WasmOp.Op_i64_rotl) { "java.lang.Long.rotateLeft(l, ${"r".cint})" }
         binop_long(WasmOp.Op_i64_rotr) { "java.lang.Long.rotateRight(l, ${"r".cint})" }
 
@@ -283,7 +295,7 @@ open class Exporter(val module: WasmModule) {
         unop_double(WasmOp.Op_f64_ceil) { "java.lang.Math.ceil(v)" }
         unop_double(WasmOp.Op_f64_floor) { "java.lang.Math.floor(v)" }
         unop_double(WasmOp.Op_f64_trunc) { "v".clong.cdouble } // @TODO: TODO
-        unop_double(WasmOp.Op_f64_nearest) { "java.lang.Math.round(v)" } // @TODO: TODO
+        unop_double(WasmOp.Op_f64_nearest) { "java.lang.Math.round(v)".cdouble } // @TODO: TODO
         unop_double(WasmOp.Op_f64_sqrt) { "java.lang.Math.sqrt(v)" }
 
         binop_double(WasmOp.Op_f64_add) { "l + r" }
@@ -294,7 +306,7 @@ open class Exporter(val module: WasmModule) {
         binop_double(WasmOp.Op_f64_max) { "java.lang.Math.max(l, r)" }
         binop_double(WasmOp.Op_f64_copysign) { "java.lang.Math.copySign(l, r)" }
 
-        unop(WasmOp.Op_i32_wrap_i64, i64, i32, "(v & 0xFFFFFFFFL)".cint)
+        unop(WasmOp.Op_i32_wrap_i64, i64, i32, "(v $AND 0xFFFFFFFFL)".cint)
         unop(WasmOp.Op_i32_trunc_s_f32, f32, i32, "v".cint) // @TODO: VERIFY!
         unop(WasmOp.Op_i32_trunc_u_f32, f32, i32, "v".clong.cint) // @TODO: VERIFY!
 
@@ -354,7 +366,7 @@ open class Exporter(val module: WasmModule) {
     fun Indenter.iopr(op: WasmOp, type: WasmType, gen: () -> String) =
         iop(op, type, int("address"), int("offset"), int("align")) { gen() }
 
-    fun Indenter.iop(op: WasmOp, ret: WasmType, vararg args: MyArg, expr: () -> String) = FUNC("$op", ret, *args) { expr() }
+    fun Indenter.iop(op: WasmOp, ret: WasmType, vararg args: MyArg, expr: () -> String) = FUNC_INLINE("$op", ret, *args) { expr() }
 
     protected open fun Indenter.writeMain(className: String) {
         val mainFunc = module.functions.firstOrNull { it.export?.name == "_main" }
@@ -386,11 +398,13 @@ open class Exporter(val module: WasmModule) {
 
     fun Indenter.iglob(ns: String, name: String, ret: WasmType, callback: () -> String) {
         getImportGlobal(ns, name)?.let {
-            line("${ret.type()} $it = ${callback()};")
+            FIELD(ret, it, callback())
         }
     }
 
     data class MyArg(val name: String, val type: WasmType)
+
+    fun List<AstLocal>.toArgs(ctx: DumpContext): Array<MyArg> = this.map { it.type(ctx.getName(it)) }.toTypedArray()
 
     operator fun WasmType.invoke(name: String) = MyArg(name, this)
 
@@ -398,7 +412,7 @@ open class Exporter(val module: WasmModule) {
 
     fun Indenter.ifunc(ns: String, name: String, ret: WasmType, vararg args: MyArg, callback: Indenter.() -> Unit) {
         getImportFunc(ns, name)?.let {
-            line("${ret.type()} $it(${args.argstr()})") {
+            FUNC_INDENTER(it, ret, *args, pub = false) {
                 callback()
             }
         }
@@ -406,12 +420,12 @@ open class Exporter(val module: WasmModule) {
 
     protected open fun Indenter.syscall(syscall: WasmSyscall, handler: Indenter.() -> Unit) {
         getImportFunc("env", "___syscall${syscall.id}")?.let {
-            line("private int $it(int syscall, int address)") {
-                line("try") {
+            FUNC_INDENTER(it, int, int("syscall"), int("address")) {
+                TRY {
                     handler()
                 }
-                line("catch (Throwable e)") {
-                    line("throw new RuntimeException(e);")
+                CATCH(THROWABLE("e")) {
+                    THROW(RTEXCEPTION.new("e"))
                 }
             }
         }
@@ -424,7 +438,7 @@ open class Exporter(val module: WasmModule) {
                 val syscallId = import.name.removePrefix("___syscall").toInt()
                 val syscall = WasmSyscall.SYSCALL_BY_ID[syscallId] ?: continue
                 syscall(syscall) {
-                    line("return TODO_i32(\"unimplemented syscall $syscallId\");")
+                    RETURN("""TODO_i32("unimplemented syscall $syscallId")""")
                 }
             }
         }
@@ -468,6 +482,7 @@ open class Exporter(val module: WasmModule) {
     }
 
     open fun Indenter.memoryStatics() {
+        line("static private final java.nio.charset.Charset UTF_8 = java.nio.charset.Charset.forName(\"UTF-8\");")
         line("static public final int HEAP_SIZE = 64 * 1024 * 1024; // 64 MB")
         line("static public final int STACK_INITIAL_SIZE = 128 * 1024; // 128 KB ")
     }
@@ -477,18 +492,24 @@ open class Exporter(val module: WasmModule) {
         line("public final java.nio.ByteBuffer heap = java.nio.ByteBuffer.wrap(heapBytes).order(java.nio.ByteOrder.nativeOrder());")
     }
 
+    val supresses = listOf("RemoveRedundantBackticks", "CanBeVal", "RedundantExplicitType", "RedundantSemicolon", "RedundantUnitReturnType")
+
+    open fun Indenter.preClass() {
+    }
+
     open fun dump(config: ExportConfig): Indenter = Indenter {
         val className = names.allocate(config.className)
         if (config.packageName.isNotEmpty()) {
             line("package ${config.packageName};")
         }
+        preClass()
         line("public final class $className") {
-            dumpConstructor(className)
+            memoryDynamics()
             statics {
                 writeMain(className)
                 memoryStatics()
             }
-            memoryDynamics()
+            dumpConstructor(className)
 
             var maxMem = 1024
             val dataIndices = LinkedHashMap<Int, String>()
@@ -515,29 +536,40 @@ open class Exporter(val module: WasmModule) {
 
             val maxmMemAlign = maxMem.nextAlignedTo(1024)
 
-            line("static private final java.nio.charset.Charset UTF_8 = java.nio.charset.Charset.forName(\"UTF-8\");")
+            FIELD(int(STACKTOP), "$maxmMemAlign + 1024")
+            FIELD(int(STACK_MAX), "$STACKTOP + STACK_INITIAL_SIZE")
+            FIELD(int("STACKTOP_REV"), "heap.limit()")
 
-            line("private int $STACKTOP = $maxmMemAlign + 1024;")
-            line("private int $STACK_MAX = $STACKTOP + STACK_INITIAL_SIZE;")
-            line("private int STACKTOP_REV = heap.limit();")
+            FIELD(int(DYNAMICTOP_PTR), expr = "8")
+            FIELD(int(tempDoublePtr), expr = "16")
 
-            line("private final int $DYNAMICTOP_PTR = 8;")
-            line("private final int $tempDoublePtr = 16;")
-
-            line("private void initDynamictop()") {
+            FUNC_INDENTER("initDynamictop", void, pub = false) {
                 line("sw($DYNAMICTOP_PTR, $STACK_MAX);")
                 line("sw($tempDoublePtr, $maxmMemAlign);")
             }
 
-            line("public int stackAllocRev(int count) { STACKTOP_REV -= (count + 15) & ~0xF; return STACKTOP_REV; }")
-            line("public int allocBytes(byte[] bytes) { int address = stackAllocRev(bytes.length); putBytes(address, bytes); return address; }")
-            line("public int allocInts(int[] ints) { int address = stackAllocRev(ints.length * 4); putInts(address, ints); return address; }")
-            line("public int allocStringz(String str) { return allocBytes((str + \"\\u0000\").getBytes(UTF_8)); }")
+            FUNC_INDENTER("stackAllocRev", int, int("count")) {
+                STM_EXPR("STACKTOP_REV -= (count + 15) $AND ${"0xF".cinv}")
+                RETURN("STACKTOP_REV")
+            }
+            FUNC_INDENTER("allocBytes", int, BA("bytes")) {
+                LOCAL(int("address"), "stackAllocRev(${"bytes".asize})")
+                STM_EXPR("putBytes(address, bytes)")
+                RETURN("address")
+            }
+            FUNC_INDENTER("allocInts", int, IA("ints")) {
+                LOCAL(int("address"), "stackAllocRev(${"ints".asize} * 4)")
+                STM_EXPR("putInts(address, ints)")
+                RETURN("address")
+            }
+            FUNC_INDENTER("allocStringz", int, STR("str")) {
+                RETURN("allocBytes(${"(str + \"\\u0000\")".stringGetBytes("UTF_8")})")
+            }
 
             writeImportedFuncs()
 
             for (nn in 0 until module.datas.size step initBlockSize) {
-                line("private void init$nn()") {
+                FUNC_INDENTER("init$nn", void, pub = false) {
                     for (mm in 0 until initBlockSize) {
                         val n = nn + mm
                         val data = module.datas.getOrNull(n) ?: break
@@ -565,7 +597,7 @@ open class Exporter(val module: WasmModule) {
                         }
                         "$computeName()"
                     }
-                    line("${global.globalType.type.type()} ${moduleCtx.getName(global)} = $value;")
+                    FIELD(global.globalType.type, moduleCtx.getName(global), value)
                 }
             }
 
@@ -581,28 +613,30 @@ open class Exporter(val module: WasmModule) {
                 val argsWithIndex = (listOf("int index") + args).joinToString(", ")
                 if (rfuncs.isNotEmpty()) {
                     //run {
-                    line("private ${type.retType.type()} invoke_${type.signature}($argsWithIndex)") {
-                        line("switch (index)") {
+                    val rargs = (listOf(int("index")) + type.args.toArgs(ctx)).toTypedArray()
+                    FUNC_INDENTER("invoke_${type.signature}", type.retType, *rargs, pub = false) {
+                        SWITCH("index") {
                             for ((func, funcIndices) in rfuncs) {
                                 for (funcIdx in (funcIndices ?: continue)) {
-                                    if (func.type.retTypeVoid) {
-                                        line("case $funcIdx: this.${func.name}($argsCall); return;")
-                                    } else {
-                                        line("case $funcIdx: return this.${func.name}($argsCall);")
-                                    }
+                                    CASE_RETURN(type.retType, funcIdx, "this.${moduleCtx.getName(func)}($argsCall)")
                                 }
                             }
                         }
-                        line("throw new RuntimeException(\"Invalid function (${type.signature}) at index \" + index);")
+                        THROW(RTEXCEPTION.new("\"Invalid function (${type.signature}) at index \" + index"))
                     }
                 }
             }
 
             for (func in module.functions) {
-                line("// func (${func.index}) : ${func.name}")
                 line(dump(func))
             }
         }
+    }
+
+    fun Indenter.FIELD(arg: MyArg, expr: String) = FIELD(arg.type, arg.name, expr)
+
+    open fun Indenter.FIELD(type: WasmType, name: String, expr: String) {
+        line("${type.type()} $name = $expr;")
     }
 
     class Breaks() {
@@ -656,7 +690,7 @@ open class Exporter(val module: WasmModule) {
         //fun getName(func: WasmFunc): String = getName(func.ftype)
         fun getName(global: AstGlobal): String = globalNames.getOrPut(global) { usedNames.allocate(global.name) }
 
-        fun getName(global: Wasm.WasmGlobal): String = getName(global.astGlobal)
+        fun getName(global: WasmGlobal): String = getName(global.astGlobal)
     }
 
     inner class DumpContext(val moduleCtx: ModuleDumpContext, val func: WasmFunc?) {
@@ -692,17 +726,18 @@ open class Exporter(val module: WasmModule) {
             }
             is Wast.SetLocal -> out.line(writeSetLocal(ctx.getName(local), expr.dump(ctx)))
             is Wast.SetGlobal -> out.line(writeSetGlobal(ctx.getName(global), expr.dump(ctx)))
-            is Wast.RETURN -> run { out.line(writeReturn(expr.dump(ctx))); unreachable = true }
-            is Wast.RETURN_VOID -> run { out.line(writeReturnVoid()); unreachable = true }
+            is Wast.RETURN -> run { out.RETURN(expr.dump(ctx)); unreachable = true }
+            is Wast.RETURN_VOID -> run { out.RETURN_VOID(); unreachable = true }
             is Wast.BLOCK -> {
                 lateinit var result: DumpResult
                 val optLabel = if (label != null) "${ctx.getName(label)}: " else ""
                 if (optLabel.isEmpty()) {
-                    result = this.stm.dump(ctx, out).appendBreaks(breaks)
+                    result = stm.dump(ctx, out).appendBreaks(breaks)
                 } else {
                     //out.line("${optLabel}do") {
-                    out.line(optLabel) {
-                        result = this.stm.dump(ctx, out).appendBreaks(breaks)
+                    if (label != null) out.LABEL(ctx.getName(label))
+                    out.BLOCK {
+                        result = stm.dump(ctx, out).appendBreaks(breaks)
                     }
                     //out.line("while (false);")
                 }
@@ -711,13 +746,13 @@ open class Exporter(val module: WasmModule) {
             }
             is Wast.LOOP -> {
                 lateinit var result: DumpResult
-                val optLabel = if (label != null) "${ctx.getName(label)}: " else ""
-                out.line("${optLabel}while (true)") {
-                    result = this.stm.dump(ctx, out).appendBreaks(breaks)
+                if (label != null) out.LABEL(ctx.getName(label))
+                out.WHILE("true") {
+                    result = stm.dump(ctx, out).appendBreaks(breaks)
                     if (result.unreachable) {
                         out.line("//break;")
                     } else {
-                        out.line("break;")
+                        out.BREAK()
                         if (label != null) breaks.addLabelSure(label)
                     }
                 }
@@ -725,16 +760,16 @@ open class Exporter(val module: WasmModule) {
                 if (ctx.debug) println("LOOP. ${ctx.func?.name} (loop_label=${label?.name}). Unreachable: $unreachable, $breaks")
             }
             is Wast.IF -> {
-                out.line("if (${dumpBoolean(cond, ctx)})") {
-                    val result = this.btrue.dump(ctx, out).appendBreaks(breaks)
+                out.IF(dumpBoolean(cond, ctx)) {
+                    val result = btrue.dump(ctx, out).appendBreaks(breaks)
                 }
             }
             is Wast.IF_ELSE -> {
-                out.line("if (${dumpBoolean(cond, ctx)})") {
-                    val result = this.btrue.dump(ctx, out).appendBreaks(breaks)
+                out.IF(dumpBoolean(cond, ctx)) {
+                    val result = btrue.dump(ctx, out).appendBreaks(breaks)
                 }
-                out.line("else") {
-                    val result = this.bfalse.dump(ctx, out).appendBreaks(breaks)
+                out.ELSE {
+                    val result = bfalse.dump(ctx, out).appendBreaks(breaks)
                 }
             }
             is Wast.BR -> {
@@ -743,16 +778,22 @@ open class Exporter(val module: WasmModule) {
                 unreachable = true
             }
             is Wast.BR_IF -> {
-                out.line("if (${dumpBoolean(cond, ctx)}) " + writeGoto(label, ctx))
+                out.IF(dumpBoolean(cond, ctx)) {
+                    line(writeGoto(label, ctx))
+                }
                 breaks.addLabel(label)
             }
             is Wast.BR_TABLE -> {
-                out.line("switch (${this.subject.dump(ctx)})") {
-                    for ((index, label) in this.labels) {
-                        out.line("case $index: ${label.goto(ctx)};")
+                out.SWITCH(subject.dump(ctx)) {
+                    for ((index, label) in labels) {
+                        out.CASE_FSTM(index) {
+                            STM_EXPR(label.goto(ctx))
+                        }
                         breaks.addLabel(label)
                     }
-                    out.line("default: ${this.default.goto(ctx)};")
+                    CASE_DEFAULT_FSTM {
+                        STM_EXPR(default.goto(ctx))
+                    }
                     breaks.addLabel(default)
                 }
             }
@@ -816,13 +857,15 @@ open class Exporter(val module: WasmModule) {
         return expr.dump(ctx) + " != 0"
     }
 
-    protected open fun writeGoto(label: AstLabel, ctx: DumpContext) = Indenter(label.goto(ctx) + ";")
-    protected open fun writeSetLocal(localName: String, expr: String) = Indenter("$localName = $expr;")
-    protected open fun writeSetGlobal(globalName: String, expr: String) = Indenter("this.$globalName = $expr;")
-    protected open fun writeReturn(expr: String) = Indenter("return $expr;")
-    protected open fun writeReturnVoid() = Indenter("return;")
+    protected open fun writeGoto(label: AstLabel, ctx: DumpContext) =
+        Indenter(label.goto(ctx) + ";")
+    protected open fun writeSetLocal(localName: String, expr: String) =
+        Indenter("$localName = $expr;")
+    protected open fun writeSetGlobal(globalName: String, expr: String) =
+        Indenter("this.$globalName = $expr;")
     protected open fun writeExprStatement(expr: String) = Indenter("$expr;")
-    protected open fun writeExprStatementNoStm(expr: String) = Indenter("// $expr; // Not a statement")
+    protected open fun writeExprStatementNoStm(expr: String) =
+        Indenter("// $expr; // Not a statement")
     protected open fun writeUnreachable() = Indenter("// unreachable")
     protected open fun writeNop() = Indenter("// nop")
     protected open fun writeSetPhi(phiName: String, expr: String) = writeSetLocal(phiName, expr)
@@ -831,6 +874,7 @@ open class Exporter(val module: WasmModule) {
     protected open fun const(value: Long) = "${value}L"
     protected open fun const(value: Float) = "${value}f"
     protected open fun const(value: Double) = "$value"
+
     protected open fun unop(op: WasmOp, vd: String) = when (op) {
         WasmOp.Op_f32_neg, WasmOp.Op_f64_neg -> "-($vd)"
         WasmOp.Op_f64_promote_f32 -> vd.cdouble
@@ -847,14 +891,12 @@ open class Exporter(val module: WasmModule) {
         WasmOp.Op_i32_and, WasmOp.Op_i64_and -> "($ld $AND $rd)"
         WasmOp.Op_i32_or, WasmOp.Op_i64_or -> "($ld $OR $rd)"
         WasmOp.Op_i32_xor, WasmOp.Op_i64_xor -> "($ld $XOR $rd)"
-        WasmOp.Op_i32_shl, WasmOp.Op_i64_shl -> "($ld $SHL $rd)"
-        WasmOp.Op_i32_shr_s, WasmOp.Op_i64_shr_s -> "($ld $SHR $rd)"
-        WasmOp.Op_i32_shr_u, WasmOp.Op_i64_shr_u -> "($ld $SHRU $rd)"
+        WasmOp.Op_i32_shl -> "($ld $SHL ${rd.cint})"
+        WasmOp.Op_i32_shr_s, WasmOp.Op_i64_shr_s -> "($ld $SHR ${rd.cint})"
+        WasmOp.Op_i32_shr_u, WasmOp.Op_i64_shr_u -> "($ld $USHR ${rd.cint})"
         else -> "$op($ld, $rd)"
     }
 
-    protected open fun terop(op: WasmOp, cond: String, strue: String, sfalse: String) =
-        "((($cond)) ? ($strue) : ($sfalse))"
 
     protected open fun getGlobal(name: String) = "this.$name"
     protected open fun getLocal(name: String) = name
@@ -914,50 +956,84 @@ open class Exporter(val module: WasmModule) {
     }
 
     open fun Indenter.writeMemoryTools() {
-        FUNC("putBytes", void, int("address"), BA("data"), int("offset"), int("size")) { "System.arraycopy(data, offset, heapBytes, address, size);" }
-        FUNC("putBytes", void, int("address"), BA("data")) { "putBytes(address, data, 0, ${"data".asize});" }
-        FUNC("putInts", void, int("address"), IA("data")) { Indenter.genString { FOR("n", "0", "data".asize) { line("heap.putInt(address + n * 4, data[n]);") } } }
-        line("public void putBytesB64(int address, String... datas) { final StringBuilder out = new StringBuilder(); for (int n = 0; n < datas.length; n++) out.append(datas[n]); putBytes(address, java.util.Base64.getDecoder().decode(out.toString())); }")
-        line("public void putString(int address, String string, java.nio.charset.Charset charset) { putBytes(address, string.getBytes(charset)); }")
-        line("public byte[] getBytes(int address, int size) { return java.util.Arrays.copyOfRange(heapBytes, address, address + size); }")
-        line("public byte[] getBytez(int address) { return getBytez(address, java.lang.Integer.MAX_VALUE); }")
-        line("public int strlen(final int address) { int n = 0; while (heapBytes[address + n] != 0) n++; return n; }")
-        line("public byte[] getBytez(int address, int max) { return getBytes(address, strlen(address)); }")
-        line("public String getStringz(int address, java.nio.charset.Charset charset) { return new java.lang.String(getBytez(address), charset); }")
-        line("public String getStringz(int address) { return getStringz(address, UTF_8); }")
+        FUNC_INLINE("putBytes", void, int("address"), BA("data"), int("offset"), int("size")) { "System.arraycopy(data, offset, heapBytes, address, size);" }
+        FUNC_INLINE("putBytes", void, int("address"), BA("data")) { "putBytes(address, data, 0, ${"data".asize});" }
+        FUNC_INDENTER("putInts", void, int("address"), IA("data")) {
+            FOR("n", "0", "data".asize) {
+                STM_EXPR("heap.putInt(address + n * 4, data[n])")
+            }
+        }
+        FUNC_INDENTER("putBytesB64", void, int("address"), VARARG(STR)("datas")) {
+            LOCAL(SBUILDER("out"), SBUILDER.new())
+            FOR("n", from = "0", until = "datas".asize) {
+                STM_EXPR("out.append(datas[n])")
+            }
+            STM_EXPR("putBytes(address, java.util.Base64.getDecoder().decode(out.toString()))")
+        }
+        FUNC_INDENTER("putString", void, int("address"), STR("string"), CHARSET("charset")) {
+            STM_EXPR("putBytes(address, ${"string".stringGetBytes("charset")})")
+        }
+        FUNC_INDENTER("getBytes", BA, int("address"), int("size")) {
+            RETURN("java.util.Arrays.copyOfRange(heapBytes, address, address + size)")
+        }
+        FUNC_INDENTER("getBytez", BA, int("address")) {
+            RETURN("getBytez(address, java.lang.Integer.MAX_VALUE)")
+        }
+        FUNC_INDENTER("strlen", int, int("address")) {
+            LOCAL(int("n"), expr = "0")
+            WHILE("${"heapBytes[address + n]".cint} != 0") {
+                STM_EXPR("n++")
+            }
+            RETURN("n")
+        }
+
+        FUNC_INDENTER("getBytez", BA, int("address"), int("max")) {
+            RETURN( "getBytes(address, strlen(address))")
+        }
+        FUNC_INDENTER("getStringz", STR, int("address"), CHARSET("charset")) {
+            RETURN(STR.new("getBytez(address)", "charset"))
+        }
+        FUNC_INDENTER("getStringz", STR, int("address")) {
+            RETURN("getStringz(address, UTF_8)")
+        }
     }
 
+    open fun String.stringGetBytes(charset: String): String = "$this.getBytes($charset)"
+
     fun dump(func: WasmFunc): Indenter = Indenter {
+        line("// func (${func.index}) : ${func.name}")
         val bodyAst = func.getAst(module)
         if (bodyAst != null) {
-            val visibility = if (func.export != null) "public " else "private "
             val ctx = DumpContext(moduleCtx, func)
-            val args = func.type.args.joinToString(", ") { "${it.type.type()} " + ctx.getName(it) + "" }
             val arg = func.type.args
-            line("$visibility${func.type.retType.type()} ${moduleCtx.getName(func)}($args)") {
+            FUNC_INDENTER(moduleCtx.getName(func), func.type.retType, *func.type.args.map { it.type(ctx.getName(it)) }.toTypedArray(), pub = func.export != null) {
                 when (func.name) {
                     "\$_memmove", "\$_memcpy" -> {
                         val dst = ctx.getName(arg[0])
                         val src = ctx.getName(arg[1])
                         val count = ctx.getName(arg[2])
-                        line("System.arraycopy(heapBytes, $src, heapBytes, $dst, $count);")
-                        line("return $dst;")
+                        STM_EXPR("System.arraycopy(heapBytes, $src, heapBytes, $dst, $count)")
+                        RETURN(dst)
                     }
                     "\$_memset" -> {
                         val ptr = ctx.getName(arg[0])
                         val value = ctx.getName(arg[1])
                         val num = ctx.getName(arg[2])
-                        line("java.util.Arrays.fill(heapBytes, $ptr, $ptr + $num, ${value.cbyte});")
-                        line("return $ptr;")
+                        STM_EXPR("java.util.Arrays.fill(heapBytes, $ptr, $ptr + $num, ${value.cbyte})")
+                        RETURN(ptr)
                     }
                     else -> {
                         val argsSet = func.type.args.toSet()
-                        for (local in bodyAst.getLocals()) {
-                            if (local in argsSet) continue
-                            line("${local.type.type()} ${ctx.getName(local)} = ${local.type.default()};")
+                        val allLocals = bodyAst.getLocals()
+                        for (local in allLocals.filter { it !in argsSet }) {
+                            LOCAL(local.type(ctx.getName(local)), local.type.default())
                         }
+                        dumpExtraLocals(ctx, func, allLocals, argsSet)
                         val res = bodyAst.dump(ctx)
-                        for (phi in ctx.phiTypes) line("${phi.type()} phi_$phi = ${phi.default()};")
+
+                        for (phi in ctx.phiTypes) {
+                            LOCAL(phi("phi_$phi"), phi.default())
+                        }
                         line(res.indenter)
                     }
                 }
@@ -965,162 +1041,183 @@ open class Exporter(val module: WasmModule) {
         }
     }
 
+    open fun Indenter.dumpExtraLocals(ctx: DumpContext, func: WasmFunc, locs: List<AstLocal>, args: Set<AstLocal>) {
+    }
+
+    open val IntegerType = "Integer"
+
     fun Indenter.syscalls() {
-        line("private int lastFD = 10;")
-        line("private java.util.Map<Integer, java.io.RandomAccessFile> files = new java.util.HashMap<Integer, java.io.RandomAccessFile>();")
+        FIELD(int("lastFD"), "10")
+        FIELD(type("java.util.HashMap<$IntegerType, java.io.RandomAccessFile>")("files"), type("java.util.HashMap<$IntegerType, java.io.RandomAccessFile>").new())
 
         syscall(WasmSyscall.SYS_open) {
-            line("final String pathName = getStringz(lw(address + 0));")
-            line("final int flags = lw(address + 4);")
-            line("final int mode = lw(address + 8);")
-            line("final int fd = lastFD++;")
-            line("final String smode = ((flags & ($O_WRONLY|$O_RDWR)) != 0) ? \"rw\" : \"r\";")
-            line("final java.io.File file = new java.io.File(pathName);")
-            line("final java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, smode);")
-            line("files.put(fd, raf);")
-            line("return fd;")
+            LOCAL(STR("pathName"), "getStringz(lw(address + 0))")
+            LOCAL(int("flags"), "lw(address + 4)")
+            LOCAL(int("mode"), "lw(address + 8)")
+            LOCAL(int("fd"), "lastFD++")
+            LOCAL(STR("smode"), ternary("(flags $AND ($O_WRONLY $OR $O_RDWR)) != 0", "\"rw\"", "\"r\""))
+            LOCAL(FILE("file"), FILE.new("pathName"))
+            LOCAL(RAFILE("raf"), RAFILE.new("file", "smode"))
+            STM_EXPR("files.put(fd, raf)")
+            RETURN("fd")
         }
 
         syscall(WasmSyscall.SYS_close) {
-            line("final int fd = lw(address + 0);")
+            LOCAL(int("fd"), "lw(address + 0)")
             //line("System.out.println(\"close fd=\" + fd);")
-            line("java.io.RandomAccessFile raf = files.remove(fd);")
+            LOCAL(RAFILE.nullable("raf"), "files.remove(fd)")
             //line("files.remove(fd);")
-            line("if (raf != null) raf.close();")
-            line("return 0;")
+            IF("raf != null") {
+                STM_EXPR("raf.close()")
+            }
+            RETURN("0")
         }
 
         syscall(WasmSyscall.SYS_ioctl) {
-            line("final int fd = lw(address + 0);")
-            line("final int param = lw(address + 4);")
+            LOCAL(int("fd"), "lw(address + 0)")
+            LOCAL(int("param"), "lw(address + 4)")
             //line("System.out.println(\"ioctl fd=\" + fd + \", param=\" + param);")
-            line("return 0;")
+            RETURN("0")
         }
 
         syscall(WasmSyscall.SYS_fcntl64) {
-            line("final int fd = lw(address + 0);")
-            line("final int paramH = lw(address + 4);")
-            line("final int paramL = lw(address + 8);")
+            LOCAL(int("fd"), "lw(address + 0)")
+            LOCAL(int("paramH"), "lw(address + 4)")
+            LOCAL(int("paramL"), "lw(address + 8)")
             //line("System.out.println(\"ioctl fd=\" + fd + \", param=\" + param);")
-            line("return 0;")
+            RETURN("0")
         }
 
         syscall(WasmSyscall.SYS__llseek) {
-            line("final int fd = lw(address + 0);")
-            line("final int offsetH = lw(address + 4);")
-            line("final int offsetL = lw(address + 8);")
-            line("final int result = lw(address + 12);")
-            line("final int whence = lw(address + 16);")
-            line("final long offset = (long)offsetL; // offsetH unused in emscripten")
+            LOCAL(int("fd"), "lw(address + 0)")
+            LOCAL(int("offsetH"), "lw(address + 4)")
+            LOCAL(int("offsetL"), "lw(address + 8)")
+            LOCAL(int("result"), "lw(address + 12)")
+            LOCAL(int("whence"), "lw(address + 16)")
+            LOCAL(long("offset"), "offsetL".clong) // offsetH unused in emscripten
             //line("System.out.printf(\"llseek fd=%d, offsetH=%d, offsetL=%d, result=%d, whence=%d\", fd, offsetH, offsetL, result, whence);")
-            line("final java.io.RandomAccessFile raf = files.get(fd);")
-            line("if (raf == null) return -1;")
-            line("switch (whence)") {
-                line("case 0: raf.seek(offset); break;") // SEEK_SET
-                line("case 1: raf.seek(raf.getFilePointer() + offset); break;") // SEEK_CUR
-                line("case 2: raf.seek(raf.length() + offset); break;") // SEEK_END
+            LOCAL(RAFILE.nullable("raf"), "files.get(fd)")
+            IF("raf == null") {
+                RETURN("-1")
             }
-            line("if (result != 0) sdw(result, raf.getFilePointer());")
-            line("return 0;")
+            SWITCH("whence") {
+                CASE_STM_BREAK(0) { // SEEK_SET
+                    STM_EXPR("raf.seek(offset)")
+                }
+                CASE_STM_BREAK(1) { // SEEK_CUR
+                    STM_EXPR("raf.seek(raf.getFilePointer() + offset)")
+                }
+                CASE_STM_BREAK(2) { // SEEK_END
+                    STM_EXPR("raf.seek(raf.length() + offset)")
+                }
+            }
+            IF("result != 0") {
+                STM_EXPR("sdw(result, raf.getFilePointer())")
+            }
+            RETURN("0")
         }
 
         syscall(WasmSyscall.SYS_readv) {
-            line("final int fd = lw(address + 0);")
-            line("final int iov = lw(address + 4);")
-            line("final int iovcnt = lw(address + 8);")
+            LOCAL(int("fd"), "lw(address + 0)")
+            LOCAL(int("iov"), "lw(address + 4)")
+            LOCAL(int("iovcnt"), "lw(address + 8)")
             //line("System.out.println(\"readv fd=\" + fd + \", iov=\" + iov + \", iovcnt=\" + iovcnt);")
-            line("final java.io.RandomAccessFile raf = files.get(fd);")
-            line("int ret = 0;")
-            line("end:")
+            LOCAL(RAFILE.nullable("raf"), "files.get(fd)")
+            LOCAL(int("ret"), "0")
+            LABEL("end")
             FOR("cc", from = "0", until = "iovcnt") {
-                line("int ptr = lw((iov + (cc * 8)) + 0);")
-                line("int len = lw((iov + (cc * 8)) + 4);")
+                LOCAL(int("ptr"), "lw((iov + (cc * 8)) + 0)")
+                LOCAL(int("len"), "lw((iov + (cc * 8)) + 4)")
                 //line("System.out.println(\"chunk: ptr=\" + ptr + \",len=\" + len);")
 
-                line("int res = 0;")
-                line("if (raf != null)") {
-                    line("res = raf.read(heapBytes, ptr, len);")
+                LOCAL(int("res"), "0")
+                IF("raf != null") {
+                    STM_EXPR("res = raf.read(heapBytes, ptr, len)")
                 }
-                line("else if (fd == 0)") {
-                    line("res = System.in.read(heapBytes, ptr, len);")
+                ELSE_IF("fd == 0") {
+                    STM_EXPR("res = ${System_in()}.read(heapBytes, ptr, len)")
                 }
-                line("if (res <= 0) break end;")
-                line("ret += res;")
+                IF("res <= 0") {
+                    BREAK("end")
+                }
+                STM_EXPR("ret += res")
             }
-            line("return ret;")
+            RETURN("ret")
         }
 
         syscall(WasmSyscall.SYS_writev) {
-            val RandomAccessFileType = type("java.io.RandomAccessFile")
             LOCAL(int("fd"), "lw(address + 0)")
             LOCAL(int("iov"), "lw(address + 4)")
             LOCAL(int("iovcnt"), "lw(address + 8)")
             //line("System.out.println(\"writev fd=\" + fd + \", iov=\" + iov + \", iovcnt=\" + iovcnt);")
-            LOCAL(RandomAccessFileType("raf"), "files.get(fd)")
+            LOCAL(RAFILE.nullable("raf"), "files.get(fd)")
             LOCAL(int("ret"), "0")
             FOR("cc", from = "0", until = "iovcnt") {
                 LOCAL(int("ptr"), "lw((iov + (cc * 8)) + 0)")
                 LOCAL(int("len"), "lw((iov + (cc * 8)) + 4)")
                 //line("System.out.println(\"chunk: ptr=\" + ptr + \",len=\" + len);")
-                line("if (len == 0) continue;")
-
-                line("if (raf != null)") {
-                    line("raf.write(heapBytes, ptr, len);")
-                }
-                line("else if (fd == 1)") {
-                    line("System.out.write(heapBytes, ptr, len);")
-                }
-                line("else if (fd == 2)") {
-                    line("System.err.write(heapBytes, ptr, len);")
+                IF("len == 0") {
+                    CONTINUE()
                 }
 
-                line("ret += len;")
+                IF("raf != null") {
+                    STM_EXPR("raf.write(heapBytes, ptr, len)")
+                }
+                ELSE_IF("fd == 1") {
+                    STM_EXPR("System.out.write(heapBytes, ptr, len)")
+                }
+                ELSE_IF("fd == 2") {
+                    STM_EXPR("System.err.write(heapBytes, ptr, len)")
+                }
+                STM_EXPR("ret += len")
             }
-            line("return ret;")
+            RETURN("ret")
         }
     }
 
+    open fun System_in() = "System.in"
+
     // https://webassembly.github.io/spec/core/exec/numerics.html
     fun Indenter.writeOps(): Unit {
-        FUNC("b2i", int, bool("v")) { ternary("v", "1", "0") }
+        FUNC_INLINE("b2i", int, bool("v")) { ternary("v", "1", "0") }
 
-        line("private void TODO() { throw new RuntimeException(); }")
-        line("private int TODO_i32() { throw new RuntimeException(); }")
-        line("private long TODO_i64() { throw new RuntimeException(); }")
-        line("private float TODO_f32() { throw new RuntimeException(); }")
-        line("private double TODO_f64() { throw new RuntimeException(); }")
+        FUNC_INDENTER("TODO", void) { THROW(RTEXCEPTION.new()) }
+        FUNC_INDENTER("TODO_i32", int) { THROW(RTEXCEPTION.new()) }
+        FUNC_INDENTER("TODO_i64", long) { THROW(RTEXCEPTION.new()) }
+        FUNC_INDENTER("TODO_f32", float) { THROW(RTEXCEPTION.new()) }
+        FUNC_INDENTER("TODO_f64", double) { THROW(RTEXCEPTION.new()) }
 
-        line("private void TODO(String reason) { throw new RuntimeException(reason); }")
-        line("private int TODO_i32(String reason) { throw new RuntimeException(reason); }")
-        line("private long TODO_i64(String reason) { throw new RuntimeException(reason); }")
-        line("private float TODO_f32(String reason) { throw new RuntimeException(reason); }")
-        line("private double TODO_f64(String reason) { throw new RuntimeException(reason); }")
+        FUNC_INDENTER("TODO", void, STR("reason")) { THROW(RTEXCEPTION.new("reason")) }
+        FUNC_INDENTER("TODO_i32", int, STR("reason")) { THROW(RTEXCEPTION.new("reason")) }
+        FUNC_INDENTER("TODO_i64", long, STR("reason")) { THROW(RTEXCEPTION.new("reason")) }
+        FUNC_INDENTER("TODO_f32", float, STR("reason")) { THROW(RTEXCEPTION.new("reason")) }
+        FUNC_INDENTER("TODO_f64", double, STR("reason")) { THROW(RTEXCEPTION.new("reason")) }
 
-        line("private void sb(int address, int value) { Op_i32_store8(address, 0, 0, value); }")
-        line("private void sh(int address, int value) { Op_i32_store16(address, 0, 1, value); }")
-        line("private void sw(int address, int value) { Op_i32_store(address, 0, 2, value); }")
-        line("private void sdw(int address, long value) { Op_i64_store(address, 0, 3, value); }")
+        FUNC_INLINE("sb", void, int("address"), int("value"), pub = false) { "Op_i32_store8(address, 0, 0, value)" }
+        FUNC_INLINE("sh", void, int("address"), int("value"), pub = false) { "Op_i32_store16(address, 0, 1, value)" }
+        FUNC_INLINE("sw", void, int("address"), int("value"), pub = false) { "Op_i32_store(address, 0, 2, value)" }
+        FUNC_INLINE("sdw", void, int("address"), long("value"), pub = false) { "Op_i64_store(address, 0, 3, value)" }
 
-        line("private int lb(int address) { return Op_i32_load8_s(address, 0, 0); }")
-        line("private int lbu(int address) { return Op_i32_load8_u(address, 0, 0); }")
-        line("private int lh(int address) { return Op_i32_load16_s(address, 0, 1); }")
-        line("private int lhu(int address) { return Op_i32_load16_u(address, 0, 1); }")
-        line("private int lw(int address) { return Op_i32_load(address, 0, 2); }")
-        line("private long ldw(int address) { return Op_i64_load(address, 0, 3); }")
+        FUNC_INLINE("lb", int, int("address"), pub = false) { "Op_i32_load8_s(address, 0, 0)" }
+        FUNC_INLINE("lbu", int, int("address"), pub = false) { "Op_i32_load8_u(address, 0, 0)" }
+        FUNC_INLINE("lh", int, int("address"), pub = false) { "Op_i32_load16_s(address, 0, 1)" }
+        FUNC_INLINE("lhu", int, int("address"), pub = false) { "Op_i32_load16_u(address, 0, 1)" }
+        FUNC_INLINE("lw", int, int("address"), pub = false) { "Op_i32_load(address, 0, 2)" }
+        FUNC_INLINE("ldw", long, int("address"), pub = false) { "Op_i64_load(address, 0, 3)" }
 
-        line("private int getByte(int a) { return (int)heap.get(a); }")
-        line("private int getShort(int a) { return (int)heap.getShort(a); }")
-        line("private int getInt(int a) { return heap.getInt(a); }")
-        line("private long getLong(int a) { return heap.getLong(a); }")
-        line("private float getFloat(int a) { return heap.getFloat(a); }")
-        line("private double getDouble(int a) { return heap.getDouble(a); }")
+        FUNC_INLINE("getByte", int, int("a"), pub = false) { "heap.get(a)".cint }
+        FUNC_INLINE("getShort", int, int("a"), pub = false) { "heap.getShort(a)".cint }
+        FUNC_INLINE("getInt", int, int("a"), pub = false) { "heap.getInt(a)" }
+        FUNC_INLINE("getLong", long, int("a"), pub = false) { "heap.getLong(a)" }
+        FUNC_INLINE("getFloat", float, int("a"), pub = false) { "heap.getFloat(a)" }
+        FUNC_INLINE("getDouble", double, int("a"), pub = false) { "heap.getDouble(a)" }
 
-        line("private void putByte(int a, int v) { heap.put(a, (byte)v); }")
-        line("private void putShort(int a, int v) { heap.putShort(a, (short)v); }")
-        line("private void putInt(int a, int v) { heap.putInt(a, v); }")
-        line("private void putLong(int a, long v) { heap.putLong(a, v); }")
-        line("private void putFloat(int a, float v) { heap.putFloat(a, v); }")
-        line("private void putDouble(int a, double v) { heap.putDouble(a, v); }")
+        FUNC_INLINE("putByte", void, int("a"), int("v"), pub = false) { "heap.put(a, ${"v".cbyte})" }
+        FUNC_INLINE("putShort", void, int("a"), int("v"), pub = false) { "heap.putShort(a, ${"v".cshort})" }
+        FUNC_INLINE("putInt", void, int("a"), int("v"), pub = false) { "heap.putInt(a, v)" }
+        FUNC_INLINE("putLong", void, int("a"), long("v"), pub = false) { "heap.putLong(a, v)" }
+        FUNC_INLINE("putFloat", void, int("a"), float("v"), pub = false) { "heap.putFloat(a, v)" }
+        FUNC_INLINE("putDouble", void, int("a"), double("v"), pub = false) { "heap.putDouble(a, v)" }
 
         //Op_memory_size
         //Op_memory_grow
@@ -1129,27 +1226,81 @@ open class Exporter(val module: WasmModule) {
         //Op_f32_const
         //Op_f64_const
 
-        line("private int checkAddress(int address, int offset, int align, int size)") {
-            line("int raddress = address + offset;")
-            line("if (raddress < 0 || raddress >= heap.limit() - 4)") {
-                line("System.out.printf(\"ADDRESS: %d (%d + %d) align=%d, size=%d\\n\", raddress, address, offset, align, size);")
+        FUNC_INDENTER("checkAddress", int, int("address"), int("offset"), int("align"), int("size"), pub = false) {
+            LOCAL(int("raddress"), "address + offset")
+            IF("raddress < 0 || raddress >= heap.limit() - 4") {
+                STM_EXPR("System.out.printf(\"ADDRESS: %d (%d + %d) align=%d, size=%d\\n\", raddress, address, offset, align, size)")
             }
             //line("if ((raddress & ((1 << align) - 1)) != 0)") {
             //    line("System.out.printf(\"UNALIGNED ACCESS %d (%d + %d) align=%d, size=%d!\\n\", raddress, address, offset, align, size);")
             //}
-            line("return raddress;")
+            RETURN("raddress")
         }
         line("")
 
-        line("private int checkARead(int address, int offset, int align, int size)") {
-            line("return checkAddress(address, offset, align, size);")
+        FUNC_INDENTER("checkARead", int, int("address"), int("offset"), int("align"), int("size"), pub = false) {
+            RETURN("checkAddress(address, offset, align, size)")
         }
         line("")
 
-        line("private int checkAWrite(int address, int offset, int align, int size)") {
-            line("return checkAddress(address, offset, align, size);")
+        FUNC_INDENTER("checkAWrite", int, int("address"), int("offset"), int("align"), int("size")) {
+            RETURN("checkAddress(address, offset, align, size)")
         }
         line("")
+    }
+
+    fun WasmType.new(vararg args: String) = NEW(this, *args)
+
+    open fun Indenter.THROW(expr: String) {
+        line("throw $expr;")
+    }
+
+    open fun Indenter.TRY(callback: Indenter.() -> Unit) {
+        line("try") {
+            callback()
+        }
+    }
+
+    open fun Indenter.CATCH(arg: MyArg, callback: Indenter.() -> Unit) {
+        line("catch (${arg.type.type()} ${arg.name})") {
+            callback()
+        }
+    }
+
+    open fun NEW(type: WasmType, vararg args: String): String {
+        return "new ${type.type(instantiate = true)}(${args.joinToString(", ")})"
+    }
+
+    open fun Indenter.IF(cond: String, body: Indenter.() -> Unit) {
+        line("if ($cond)") {
+            body()
+        }
+    }
+
+    open fun Indenter.ELSE_IF(cond: String, body: Indenter.() -> Unit) {
+        line("else if ($cond)") {
+            body()
+        }
+    }
+
+    open fun Indenter.ELSE(body: Indenter.() -> Unit) {
+        line("else") {
+            body()
+        }
+    }
+
+    open fun Indenter.LABEL(name: String) {
+        line("$name:")
+    }
+
+    open fun AstLabel.goto(ctx: DumpContext) = "${this.kind.keyword} ${ctx.getName(this)}"
+
+    open fun Indenter.BREAK(name: String? = null) {
+        line(if (name.isNullOrEmpty()) "break;" else "break $name;")
+    }
+
+    open fun Indenter.CONTINUE(name: String? = null) {
+        line(if (name.isNullOrEmpty()) "continue;" else "continue $name;")
     }
 
     open fun Indenter.LOCAL(arg: MyArg, expr: String) {
@@ -1162,10 +1313,84 @@ open class Exporter(val module: WasmModule) {
         }
     }
 
-    open fun Indenter.FUNC(name: String, ret: WasmType, vararg args: MyArg, pub: Boolean = true, body: () -> String) {
-        val rbody = if (ret == void) body() else "return ${body()};"
+    open fun Indenter.WHILE(cond: String, body: Indenter.() -> Unit) {
+        line("while ($cond)") {
+            body()
+        }
+    }
+
+    open fun Indenter.BLOCK(body: Indenter.() -> Unit) {
+        line("") {
+            body()
+        }
+    }
+
+    open fun RETURN_INLINE(expr: String) = "return $expr;"
+    open fun STM_EXPR_INLINE(expr: String) = "$expr;"
+
+    fun Indenter.RETURN(expr: String) {
+        line(RETURN_INLINE(expr))
+    }
+
+    open fun Indenter.STM_EXPR(expr: String) {
+        line(STM_EXPR_INLINE(expr))
+    }
+
+    open fun Indenter.RETURN_VOID() {
+        line("return;")
+    }
+
+    open fun Indenter.FUNC_INLINE_RAW(name: String, ret: WasmType, vararg args: MyArg, pub: Boolean = true, body: () -> String) {
         val s = if (pub) "public" else "private"
-        line("$s ${ret.type()} $name(${args.argstr()}) { $rbody }")
+        line("$s ${ret.type()} $name(${args.argstr()}) { ${body()} }")
+    }
+
+    open fun Indenter.FUNC_INLINE(name: String, ret: WasmType, vararg args: MyArg, pub: Boolean = true, body: () -> String) {
+        val rbody = if (ret == void) STM_EXPR_INLINE(body()) else RETURN_INLINE(body())
+        FUNC_INLINE_RAW(name, ret, *args, pub = pub) { rbody }
+    }
+
+    open fun Indenter.FUNC_INDENTER(name: String, ret: WasmType, vararg args: MyArg, pub: Boolean = true, body: Indenter.() -> Unit) {
+        val s = if (pub) "public" else "private"
+        line("$s ${ret.type()} $name(${args.argstr()})") {
+            body()
+        }
+    }
+
+    open fun Indenter.SWITCH(expr: String, callback: Indenter.() -> Unit) {
+        line("switch ($expr)") {
+            callback()
+        }
+    }
+
+    open fun Indenter.CASE_RETURN(rettype: WasmType, index: Int, expr: String) {
+        if (rettype == WasmType.void) {
+            line("case $index: $expr; return;")
+        } else {
+            line("case $index: return $expr;")
+        }
+    }
+
+    open fun Indenter.CASE_STM_BREAK(index: Int, callback: Indenter.() -> Unit) {
+        line("case $index:")
+        indent {
+            callback()
+        }
+        line("break;")
+    }
+
+    open fun Indenter.CASE_FSTM(index: Int, callback: Indenter.() -> Unit) {
+        line("case $index:")
+        indent {
+            callback()
+        }
+    }
+
+    open fun Indenter.CASE_DEFAULT_FSTM(callback: Indenter.() -> Unit) {
+        line("default:")
+        indent {
+            callback()
+        }
     }
 
     open fun WasmType.default(): String = when (this) {
@@ -1175,7 +1400,7 @@ open class Exporter(val module: WasmModule) {
         else -> "0"
     }
 
-    open fun WasmType.type(): String = when (this) {
+    open fun WasmType.type(instantiate: Boolean = false): String = when (this) {
         WasmType.void -> "void"
         WasmType._i8 -> "byte"
         WasmType._i16 -> "short"
@@ -1183,10 +1408,14 @@ open class Exporter(val module: WasmModule) {
         WasmType.i64 -> "long"
         WasmType.f32 -> "float"
         WasmType.f64 -> "double"
-        is WasmType._ARRAY -> "${this.element.type()}[]"
-        is WasmType.Function -> "(${this.args.joinToString(", ") { it.type.type() }}) -> ${this.retType.type()}"
+        is WasmType._NULLABLE -> this.element.type(instantiate)
+        is WasmType._ARRAY -> "${this.element.type(instantiate)}[]"
+        is WasmType._VARARG -> "${this.element.type(instantiate)}..."
+        is WasmType.Function -> "(${this.args.joinToString(", ") { it.type.type() }}) -> ${this.retType.type(instantiate)}"
         else -> "$this"
     }
 
-    fun AstLabel.goto(ctx: DumpContext) = "${this.kind.keyword} ${ctx.getName(this)}"
+    open val String.cinv get() = "(~($this))"
 }
+
+val WasmType.nullable get() = WasmType._NULLABLE(this)

@@ -20,10 +20,10 @@ data class WasmFuncWithType(val name: String, val type: WasmType.Function)
 data class WasmFunc(
     val index: Int,
     val type: WasmType.Function,
-    var code: Wasm.Code? = null,
-    var import: Wasm.Import? = null,
-    var export: Wasm.Export? = null,
-    var code2: Wasm.Code2? = null,
+    var code: WasmCode? = null,
+    var import: WasmImport? = null,
+    var export: WasmExport? = null,
+    var code2: WasmCode2? = null,
     val name2: String? = null
 ) : WasmFuncRef {
     fun getAst(wasm: WasmModule): Wast.Stm? = when {

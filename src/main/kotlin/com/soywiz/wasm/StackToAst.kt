@@ -11,7 +11,7 @@ class AstLabel(val kind: FlowKind, val name: String, val blockType: WasmType) {
     constructor(kind: FlowKind, index: Int, blockType: WasmType) : this(kind, "label$index", blockType)
 }
 
-fun Wasm.Expr.toAst(wasm: WasmModule, func: WasmFunc): Wast.Stm {
+fun WasmExpr.toAst(wasm: WasmModule, func: WasmFunc): Wast.Stm {
     val ast2 = toAst2(AstCtx(wasm, func), AstStack(), func.type.retType, func.type, 0)
     //println(ast2)
     return ast2
@@ -61,7 +61,7 @@ class AstStack {
     }
 }
 
-fun Wasm.Expr.toAst2(
+fun WasmExpr.toAst2(
     ctx: AstCtx,
     stack: AstStack,
     blockType: WasmType,

@@ -1,4 +1,4 @@
-package com.soywiz.wasm
+package com.soywiz.wasm.util
 
 import kotlin.math.*
 

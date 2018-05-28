@@ -2,6 +2,6 @@ package com.soywiz.wasm.exporter
 
 import com.soywiz.wasm.*
 
-class JavaExporter(module: WasmModule) : Exporter(module) {
+class JavaExporter(module: WasmModule) : JvmExporter(module) {
 
 }

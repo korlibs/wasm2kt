@@ -10,6 +10,18 @@ interface WasmType {
         override val signature: String = "[${element.signature}"
     }
 
+    class _VARARG(val element: WasmType) : WasmType {
+        override val id = -1
+        override fun toString() = "$element..."
+        override val signature: String = "[${element.signature}"
+    }
+
+    class _NULLABLE(val element: WasmType) : WasmType {
+        override val id = -1
+        override fun toString() = "$element"
+        override val signature: String = "${element.signature}"
+    }
+
     object void : WasmType {
         override val id = 0
         override fun toString() = "void"

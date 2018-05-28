@@ -20,11 +20,11 @@ open class WastReader {
 
     val functionTypes = arrayListOf<FunctionType>()
     val functions = arrayListOf<WasmFunc>()
-    val globals = arrayListOf<Wasm.WasmGlobal>()
+    val globals = arrayListOf<WasmGlobal>()
     val astglobalsByName = LinkedHashMap<String, AstGlobal>()
     val functionTypesByName = LinkedHashMap<String, WasmType.Function>()
-    val datas = arrayListOf<Wasm.Data>()
-    val elements = arrayListOf<Wasm.Element>()
+    val datas = arrayListOf<WasmData>()
+    val elements = arrayListOf<WasmElement>()
     val exports = arrayListOf<WastExport>()
     val functionHeaders = LinkedHashMap<String, WasmFuncWithType>()
 
@@ -33,7 +33,7 @@ open class WastReader {
         functionTypesByName[type.name] = type.type
     }
 
-    fun addGlobal(global: Wasm.WasmGlobal) {
+    fun addGlobal(global: WasmGlobal) {
         globals += global
         astglobalsByName[global.name] = AstGlobal(global.name, global.globalType.type)
     }
@@ -64,7 +64,7 @@ open class WastReader {
                     val import = param.parseImport()
                     val obj = import.obj
                     when (obj) {
-                        is Wasm.WasmGlobal -> {
+                        is WasmGlobal -> {
                             addGlobal(obj)
                         }
                         is WasmFunc -> {
@@ -95,7 +95,7 @@ open class WastReader {
         val functionsByName = functions.associateBy { it.name }
         for (export in exports) {
             val func = functionsByName[export.name] ?: error("Can't export ${export.name} -> ${export.exportName}")
-            func?.export = Wasm.Export(export.exportName, func.type)
+            func?.export = WasmExport(export.exportName, func.type)
         }
 
         return WasmModule(
@@ -138,7 +138,7 @@ open class WastReader {
     }
 
     class WastImport(val ns: String, val name: String, val obj: Any) {
-        val wasmImport get() = Wasm.Import(ns, name, 0, 0, Unit)
+        val wasmImport get() = WasmImport(ns, name, 0, 0, Unit)
     }
 
     class ImportMemory(val a1: String, val a2: String, val a3: String)
@@ -149,14 +149,14 @@ open class WastReader {
         val ns = string(0)
         val name = string(1)
         val import = block(2)
-        val wimport = Wasm.Import(ns, name, -1, -1, Unit)
+        val wimport = WasmImport(ns, name, -1, -1, Unit)
         val obj: Any = when (import.name) {
             "global" -> {
                 val importName = import.string(0)
                 val importType = WasmType(import.string(1))
                 //println("GLOBAL: $importName: $importType <-- $ns::$name")
                 //AstGlobal(importName, importType)
-                Wasm.WasmGlobal(
+                WasmGlobal(
                     globalType = WasmType.Global(importType, false),
                     index = -1,
                     e = null,
@@ -213,7 +213,7 @@ open class WastReader {
         return WastImport(ns, name, obj)
     }
 
-    fun Block.parseGlobal(): Wasm.WasmGlobal {
+    fun Block.parseGlobal(): WasmGlobal {
         check(this.name == "global")
         val ctx = BlockBuilderContext(globals = astglobalsByName)
         val name = string(0)
@@ -222,23 +222,23 @@ open class WastReader {
         check(typeBlock.name == "mut")
         val mut = true
         val type = WasmType(typeBlock.string(0))
-        return Wasm.WasmGlobal(WasmType.Global(type, mut), ast = Wast.RETURN(expr), name = name)
+        return WasmGlobal(WasmType.Global(type, mut), ast = Wast.RETURN(expr), name = name)
     }
 
-    fun Block.parseElem(): Wasm.Element {
+    fun Block.parseElem(): WasmElement {
         check(this.name == "elem")
         val expr = expr(0, BlockBuilderContext(globals = astglobalsByName))
         val functionNames = (1 until nparams).map { string(it) }
-        return Wasm.Element(tableIdx = 0, exprAst = expr, funcNames = functionNames)
+        return WasmElement(tableIdx = 0, exprAst = expr, funcNames = functionNames)
     }
 
-    fun Block.parseData(index: Int): Wasm.Data {
+    fun Block.parseData(index: Int): WasmData {
         check(this.name == "data")
         val expr = expr(0, BlockBuilderContext())
         val data = string(1)
         val dataBA = data.map { it.toByte() }.toByteArray()
         //File("/tmp/mem-1024.bin").writeBytes(dataBA)
-        return Wasm.Data(index = index, data = dataBA, memindex = 0, ast = expr)
+        return WasmData(index = index, data = dataBA, memindex = 0, ast = expr)
     }
 
     class WastExport(val exportName: String, val name: String)
@@ -322,7 +322,7 @@ open class WastReader {
             index = -1,
             name2 = funcName,
             type = WasmType.Function(params.map { it.second }, results),
-            code2 = Wasm.Code2(locals.map { it.value }, Wast.Stms(body))
+            code2 = WasmCode2(locals.map { it.value }, Wast.Stms(body))
         )
     }
 

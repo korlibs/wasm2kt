@@ -15,19 +15,19 @@ interface WasmInstruction {
         override val op: WasmOp = WasmOp.Op_nop
     }
 
-    data class block(val b: WasmType, val expr: Wasm.Expr) : WasmInstruction {
+    data class block(val b: WasmType, val expr: WasmExpr) : WasmInstruction {
         override val op: WasmOp = WasmOp.Op_block
     }
 
-    data class loop(val b: WasmType, val expr: Wasm.Expr) : WasmInstruction {
+    data class loop(val b: WasmType, val expr: WasmExpr) : WasmInstruction {
         override val op: WasmOp = WasmOp.Op_loop
     }
 
-    data class IF(val bt: WasmType, val btrue: Wasm.Expr, val bfalse: Wasm.Expr?) : WasmInstruction {
+    data class IF(val bt: WasmType, val btrue: WasmExpr, val bfalse: WasmExpr?) : WasmInstruction {
         override val op: WasmOp = WasmOp.Op_if
     }
 
-    data class ELSE(val code: Wasm.Expr) : WasmInstruction {
+    data class ELSE(val code: WasmExpr) : WasmInstruction {
         override val op: WasmOp = WasmOp.Op_else
     }
 
