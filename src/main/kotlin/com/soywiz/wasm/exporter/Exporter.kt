@@ -30,10 +30,18 @@ open class Exporter(val module: WasmModule) {
         val O_APPEND = 0x400
         val O_DSYNC = 0x1000
 
+        val void = WasmType.void
+        val i8 = WasmType._i8
+        val i16 = WasmType._i16
         val i32 = WasmType.i32
         val i64 = WasmType.i64
         val f32 = WasmType.f32
         val f64 = WasmType.f64
+
+        val int = WasmType.i32
+        val long = WasmType.i64
+        val float = WasmType.f32
+        val double = WasmType.f64
     }
 
     val moduleCtx = ModuleDumpContext()
@@ -46,6 +54,13 @@ open class Exporter(val module: WasmModule) {
 
     val handledGlobalsWithImport = LinkedHashSet<Wasm.WasmGlobal>()
 
+    val STACKTOP by lazy {getImportGlobal("env", "STACKTOP") ?: "STACKTOP" }
+    val STACK_MAX by lazy {getImportGlobal("env", "STACK_MAX") ?: "STACK_MAX" }
+    val DYNAMICTOP_PTR by lazy {getImportGlobal("env", "DYNAMICTOP_PTR") ?: "DYNAMICTOP_PTR" }
+    val tempDoublePtr by lazy {getImportGlobal("env", "tempDoublePtr") ?: "tempDoublePtr" }
+
+    fun cast_byte(expr: String) = cast(i8, expr)
+    fun cast_short(expr: String) = cast(i16, expr)
     fun cast_int(expr: String) = cast(i32, expr)
     fun cast_long(expr: String) = cast(i64, expr)
     fun cast_float(expr: String) = cast(f32, expr)
@@ -68,11 +83,17 @@ open class Exporter(val module: WasmModule) {
     inline fun Indenter.binop_double_bool(op: WasmOp, expr: () -> String) = binop(op, f64, i32, "b2i(${expr()})")
     inline fun Indenter.binop_double(op: WasmOp, expr: () -> String) = binop(op, f64, f64, expr())
 
-    inline fun Indenter.binop(op: WasmOp, arg: WasmType, ret: WasmType, expr: () -> String) = binop(op, arg, ret, expr())
+    inline fun Indenter.binop(op: WasmOp, arg: WasmType, ret: WasmType, expr: () -> String) =
+        binop(op, arg, ret, expr())
+
     inline fun Indenter.unop(op: WasmOp, arg: WasmType, ret: WasmType, expr: () -> String) = unop(op, arg, ret, expr())
 
-    open fun Indenter.binop(op: WasmOp, arg: WasmType, ret: WasmType, expr: String) = line("private ${ret.type()} $op(${arg.type()} l, ${arg.type()} r) { return $expr; }")
-    open fun Indenter.unop(op: WasmOp, arg: WasmType, ret: WasmType, expr: String) = line("private ${ret.type()} $op(${arg.type()} v) { return $expr; }")
+    open fun Indenter.binop(op: WasmOp, arg: WasmType, ret: WasmType, expr: String) =
+        line("private ${ret.type()} $op(${arg.type()} l, ${arg.type()} r) { return $expr; }")
+
+    open fun Indenter.unop(op: WasmOp, arg: WasmType, ret: WasmType, expr: String) =
+        line("private ${ret.type()} $op(${arg.type()} v) { return $expr; }")
+
     open fun ternary(cond: String, strue: String, sfalse: String) = "(($cond) ? ($strue) : ($sfalse))"
     open fun cast(type: WasmType, expr: String) = "((${type.type()})($expr))"
     open val AND = "&"
@@ -214,9 +235,15 @@ open class Exporter(val module: WasmModule) {
                 )
             )
         }
-        unop(WasmOp.Op_i32_trunc_u_f64, f64, i32) { ternary("v <= 0.0", "0", ternary("v >= 4294967296.0", cast_int("4294967296L"), cast_int("v"))) }
+        unop(WasmOp.Op_i32_trunc_u_f64, f64, i32) {
+            ternary(
+                "v <= 0.0",
+                "0",
+                ternary("v >= 4294967296.0", cast_int("4294967296L"), cast_int("v"))
+            )
+        }
         unop(WasmOp.Op_i64_extend_s_i32, i32, i64) { cast_long("v") }
-        unop(WasmOp.Op_i64_extend_u_i32, i32, i64) { "${cast_long("v")} $AND 0xFFFFFFFFL"  }
+        unop(WasmOp.Op_i64_extend_u_i32, i32, i64) { "${cast_long("v")} $AND 0xFFFFFFFFL" }
 
         unop(WasmOp.Op_i64_trunc_s_f32, f32, i64) { cast_long("v") } // @TODO: FIXME!
         unop(WasmOp.Op_i64_trunc_u_f32, f32, i64) { cast_long("v") } // @TODO: FIXME!
@@ -225,7 +252,11 @@ open class Exporter(val module: WasmModule) {
         unop(WasmOp.Op_i64_trunc_u_f64, f64, i64) { cast_long("v") } // @TODO: FIXME!
 
         unop(WasmOp.Op_f32_convert_s_i32, i32, f32) { cast_float("v") } // @TODO: FIXME!
-        unop(WasmOp.Op_f32_convert_u_i32, i32, f32) { cast_float("${cast_long("v")} $AND 0xFFFFFFFFL") } // @TODO: FIXME!
+        unop(
+            WasmOp.Op_f32_convert_u_i32,
+            i32,
+            f32
+        ) { cast_float("${cast_long("v")} $AND 0xFFFFFFFFL") } // @TODO: FIXME!
         unop(WasmOp.Op_f32_convert_s_i64, i64, f32) { cast_float("v") } // @TODO: FIXME!
         unop(WasmOp.Op_f32_convert_u_i64, i64, f32) { cast_float("v") } // @TODO: FIXME!
 
@@ -243,18 +274,34 @@ open class Exporter(val module: WasmModule) {
         unop(WasmOp.Op_f64_reinterpret_i64, i64, f64) { "java.lang.Double.longBitsToDouble(v)" }
     }
 
-    protected open fun Indenter.writeMain(className: String) {
-    }
-
-    fun Indenter.iglob(ns: String, name: String, ret: String, callback: () -> String) {
-        getImportGlobal(ns, name)?.let {
-            line("$ret $it = ${callback()};")
+    fun Indenter.iop(op: WasmOp, ret: WasmType, vararg args: MyArg, expr: () -> String) {
+        line("private ${ret.type()} $op(${args.argstr()})") {
+            if (ret == WasmType.void) {
+                line(expr())
+            } else {
+                line("return ${expr()};")
+            }
         }
     }
 
-    fun Indenter.ifunc(ns: String, name: String, ret: String, args: String, callback: Indenter.() -> Unit) {
+    protected open fun Indenter.writeMain(className: String) {
+    }
+
+    fun Indenter.iglob(ns: String, name: String, ret: WasmType, callback: () -> String) {
+        getImportGlobal(ns, name)?.let {
+            line("${ret.type()} $it = ${callback()};")
+        }
+    }
+
+    data class MyArg(val name: String, val type: WasmType)
+
+    operator fun WasmType.invoke(name: String) = MyArg(name, this)
+
+    fun Array<out MyArg>.argstr() = this.joinToString(", ") { it.type.type() + " " + it.name }
+
+    fun Indenter.ifunc(ns: String, name: String, ret: WasmType, vararg args: MyArg, callback: Indenter.() -> Unit) {
         getImportFunc(ns, name)?.let {
-            line("$ret $it($args)") {
+            line("${ret.type()} $it(${args.argstr()})") {
                 callback()
             }
         }
@@ -629,6 +676,8 @@ open class Exporter(val module: WasmModule) {
 
     open fun WasmType.type(): String = when (this) {
         WasmType.void -> "void"
+        WasmType._i8 -> "byte"
+        WasmType._i16 -> "short"
         WasmType.i32 -> "int"
         WasmType.i64 -> "long"
         WasmType.f32 -> "float"

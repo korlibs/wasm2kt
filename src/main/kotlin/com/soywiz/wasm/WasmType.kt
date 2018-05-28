@@ -10,6 +10,18 @@ interface WasmType {
         override val signature: String = "v"
     }
 
+    object _i8 : WasmType {
+        override val id = -1
+        override fun toString() = "i8"
+        override val signature: String = "b"
+    }
+
+    object _i16 : WasmType {
+        override val id = -1
+        override fun toString() = "i16"
+        override val signature: String = "s"
+    }
+
     object i32 : WasmType {
         override val id = 1
         override fun toString() = "i32"

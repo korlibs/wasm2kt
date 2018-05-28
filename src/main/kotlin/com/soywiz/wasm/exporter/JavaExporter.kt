@@ -40,14 +40,11 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
             syscalls()
             missingSyscalls()
 
-            val STACKTOP = getImportGlobal("env", "STACKTOP") ?: "STACKTOP"
-            val STACK_MAX = getImportGlobal("env", "STACK_MAX") ?: "STACK_MAX"
-            val DYNAMICTOP_PTR = getImportGlobal("env", "DYNAMICTOP_PTR") ?: "DYNAMICTOP_PTR"
-            val tempDoublePtr = getImportGlobal("env", "tempDoublePtr") ?: "tempDoublePtr"
             val maxmMemAlign = maxMem.nextAlignedTo(1024)
 
             line("private final int GLOBAL_BASE = 1024;")
             line("private int STACK_INITIAL_SIZE = STACK_SIZE;")
+            line("static private final java.nio.charset.Charset UTF_8 = java.nio.charset.Charset.forName(\"UTF-8\");")
 
             //line("int $STACKTOP = $maxmMemAlign;")
             //line("int $STACK_MAX = $maxmMemAlign + STACK_INITIAL_SIZE;")
@@ -57,9 +54,9 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
             line("private int STACKTOP_REV = heap.limit();")
 
             line("public int stackAllocRev(int count) { STACKTOP_REV -= (count + 15) & ~0xF; return STACKTOP_REV; }")
-            line("public int allocBytes(byte[] bytes) { int address = stackAllocRev(bytes.length); __putBytes(address, bytes); return address; }")
-            line("public int allocInts(int[] ints) { int address = stackAllocRev(ints.length * 4); __putInts(address, ints); return address; }")
-            line("public int allocStringz(String str) { try { return allocBytes((str + \"\\u0000\").getBytes(\"UTF-8\")); } catch (java.io.UnsupportedEncodingException e) { throw new RuntimeException(e); } }")
+            line("public int allocBytes(byte[] bytes) { int address = stackAllocRev(bytes.length); putBytes(address, bytes); return address; }")
+            line("public int allocInts(int[] ints) { int address = stackAllocRev(ints.length * 4); putInts(address, ints); return address; }")
+            line("public int allocStringz(String str) { return allocBytes((str + \"\\u0000\").getBytes(UTF_8)); }")
 
             line("private final int $DYNAMICTOP_PTR = 8;")
             line("private final int $tempDoublePtr = 16;")
@@ -69,41 +66,48 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                 line("sw($tempDoublePtr, $maxmMemAlign);")
             }
 
-            iglob("env", "tableBase", "int") { "0" }
-            iglob("env", "ABORT", "int") { "-1" }
-            iglob("global", "NaN", "double") { "java.lang.Double.NaN" }
-            iglob("global", "Infinity", "double") { "java.lang.Double.POSITIVE_INFINITY" }
+            iglob("env", "tableBase", int) { "0" }
+            iglob("env", "ABORT", int) { "-1" }
+            iglob("global", "NaN", double) { "java.lang.Double.NaN" }
+            iglob("global", "Infinity", double) { "java.lang.Double.POSITIVE_INFINITY" }
 
-            ifunc("global.Math", "pow", "double", "double a, double b") { line("return java.lang.Math.pow(a, b);") }
-            ifunc("env", "getTotalMemory", "int", "") { line("""return heap.limit();""") }
-            ifunc("env", "enlargeMemory", "int", "") { line("""return TODO_i32("enlargeMemory");""") }
-            ifunc("env", "abortOnCannotGrowMemory", "void", "") { line("""TODO("abortOnCannotGrowMemory");""") }
-            ifunc("env", "abortStackOverflow", "void", "int arg") { line("""TODO("abortStackOverflow");""") }
-            ifunc("env", "abort", "void", "int v") { line("""TODO("ABORT: " + v);""") }
-            ifunc("env", "_abort", "void", "") { line("TODO(\"ABORT\");") }
-            ifunc("env", "nullFunc_i", "int", "int v") { line("return 0;") }
-            ifunc("env", "nullFunc_ii", "int", "int v") { line("return 0;") }
-            ifunc("env", "nullFunc_iii", "int", "int v") { line("return 0;") }
-            ifunc("env", "nullFunc_iiii", "int", "int v") { line("return 0;") }
-            ifunc("env", "nullFunc_v", "int", "int v") { line("return 0;") }
-            ifunc("env", "nullFunc_vi", "int", "int v") { line("return 0;") }
-            ifunc("env", "nullFunc_vii", "int", "int v") { line("return 0;") }
-            ifunc("env", "nullFunc_viii", "int", "int v") { line("return 0;") }
-            ifunc("env", "_exit", "void", "int code") { line("System.exit(code);") }
-            ifunc("env", "___assert_fail", "void", "int a, int b, int c, int d") { line("TODO(\"___assert_fail\");") }
-            ifunc("env", "___lock", "void", "int addr") { line("") }
-            ifunc("env", "___unlock", "void", "int addr") { line("") }
-            ifunc("env", "_emscripten_memcpy_big", "int", "int dst, int src, int count") {
+            ifunc("global.Math", "pow", double, double("a"), double("b")) { line("return java.lang.Math.pow(a, b);") }
+            ifunc("env", "getTotalMemory", int) { line("""return heap.limit();""") }
+            ifunc("env", "enlargeMemory", int) { line("""return TODO_i32("enlargeMemory");""") }
+            ifunc("env", "abortOnCannotGrowMemory", void) { line("""TODO("abortOnCannotGrowMemory");""") }
+            ifunc("env", "abortStackOverflow", void, int("arg")) { line("""TODO("abortStackOverflow");""") }
+            ifunc("env", "abort", void, int("v")) { line("""TODO("ABORT: " + v);""") }
+            ifunc("env", "_abort", void) { line("TODO(\"ABORT\");") }
+            ifunc("env", "nullFunc_i", int, int("v")) { line("return 0;") }
+            ifunc("env", "nullFunc_ii", int, int("v")) { line("return 0;") }
+            ifunc("env", "nullFunc_iii", int, int("v")) { line("return 0;") }
+            ifunc("env", "nullFunc_iiii", int, int("v")) { line("return 0;") }
+            ifunc("env", "nullFunc_v", int, int("v")) { line("return 0;") }
+            ifunc("env", "nullFunc_vi", int, int("v")) { line("return 0;") }
+            ifunc("env", "nullFunc_vii", int, int("v")) { line("return 0;") }
+            ifunc("env", "nullFunc_viii", int, int("v")) { line("return 0;") }
+            ifunc("env", "_exit", void, int("code")) { line("System.exit(code);") }
+            ifunc(
+                "env",
+                "___assert_fail",
+                void,
+                int("a"),
+                int("b"),
+                int("c"),
+                int("d")
+            ) { line("TODO(\"___assert_fail\");") }
+            ifunc("env", "___lock", void, int("addr")) { line("") }
+            ifunc("env", "___unlock", void, int("addr")) { line("") }
+            ifunc("env", "_emscripten_memcpy_big", int, int("dst"), int("src"), int("count")) {
                 line("System.arraycopy(heapBytes, src, heapBytes, dst, count);")
                 line("return dst;")
             }
-            ifunc("env", "___setErrNo", "void", "int errno") { line("") }
-            ifunc("env", "_time", "int", "int addr") {
+            ifunc("env", "___setErrNo", void, int("error")) { line("") }
+            ifunc("env", "_time", int, int("addr")) {
                 line("int time = (int)(System.currentTimeMillis() / 1000L);")
                 line("if (addr != 0) sw(addr, time);")
                 line("return time;")
             }
-
 
             for (func in functionsWithImport - handledFunctionsWithImport) {
                 System.err.println("Unimported function ${func.import}")
@@ -121,7 +125,7 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
                         val data = module.datas.getOrNull(n) ?: break
                         val base64 = Base64.getEncoder().encodeToString(data.data)
                         val chunks = base64.splitInChunks(32 * 1024).map { "\"$it\"" }
-                        line("__putBytesB64(${dataIndices[data.index]}, ${chunks.joinToString(", ")});")
+                        line("putBytesB64(${dataIndices[data.index]}, ${chunks.joinToString(", ")});")
                     }
                 }
             }
@@ -215,44 +219,20 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
         line("static public final int HEAP_SIZE = 64 * 1024 * 1024; // 64 MB")
         line("static public final int STACK_SIZE = 128 * 1024; // 128 KB ")
         line("")
-        line("public byte[] heapBytes = new byte[HEAP_SIZE];")
-        line("public java.nio.ByteBuffer heap = java.nio.ByteBuffer.wrap(heapBytes).order(java.nio.ByteOrder.nativeOrder());")
+        line("public final byte[] heapBytes = new byte[HEAP_SIZE];")
+        line("public final java.nio.ByteBuffer heap = java.nio.ByteBuffer.wrap(heapBytes).order(java.nio.ByteOrder.nativeOrder());")
         line("")
-        line("public void __putBytes(int address, byte[] data) { for (int n = 0; n < data.length; n++) heap.put(address + n, data[n]); }")
-        line("public void __putInts(int address, int[] data) { for (int n = 0; n < data.length; n++) heap.putInt(address + n * 4, data[n]); }")
-        line("public void __putBytes(int address, String data) { for (int n = 0; n < data.length(); n++) heap.put(address + n, (byte)data.charAt(n)); }")
-        line("public void __putBytesB64(int address, String... datas) { String out = \"\"; for (int n = 0; n < datas.length; n++) out += datas[n]; __putBytes(address, java.util.Base64.getDecoder().decode(out)); }")
-        line("public void putBytes(int address, byte[] bytes, int offset, int size)") {
-            line("heap.position(address);")
-            line("heap.put(bytes, offset, size);")
-        }
-
-        line("public void putBytes(int address, byte[] bytes) { putBytes(address, bytes, 0, bytes.length); }")
-
-        line("public byte[] getBytes(int address, int size)") {
-            line("byte[] out = new byte[size];")
-            line("heap.position(address);")
-            line("heap.get(out);")
-            line("return out;")
-        }
-
-        line("public void putString(int address, String string, java.nio.charset.Charset charset)") {
-            line("putBytes(address, string.getBytes(charset));")
-        }
-
+        line("public void putBytes(int address, byte[] data, int offset, int size) { System.arraycopy(data, offset, heapBytes, address, size); }")
+        line("public void putBytes(int address, byte[] data) { putBytes(address, data, 0, data.length); }")
+        line("public void putInts(int address, int[] data) { for (int n = 0; n < data.length; n++) heap.putInt(address + n * 4, data[n]); }")
+        line("public void putBytesB64(int address, String... datas) { final StringBuilder out = new StringBuilder(); for (int n = 0; n < datas.length; n++) out.append(datas[n]); putBytes(address, java.util.Base64.getDecoder().decode(out.toString())); }")
+        line("public void putString(int address, String string, java.nio.charset.Charset charset) { putBytes(address, string.getBytes(charset)); }")
+        line("public byte[] getBytes(int address, int size) { return java.util.Arrays.copyOfRange(heapBytes, address, address + size); }")
         line("public byte[] getBytez(int address) { return getBytez(address, java.lang.Integer.MAX_VALUE); }")
-
-        line("public byte[] getBytez(final int address, final int max)") {
-            line("int n = 0;")
-            line("int cur = address;")
-            line("for (; n < max; n++)") {
-                line("if (heapBytes[cur + n] == 0) break;")
-            }
-            line("return java.util.Arrays.copyOfRange(heapBytes, address, address + n);")
-        }
-
+        line("public int strlen(final int address) { int n = 0; while (heapBytes[address + n] != 0) n++; return n; }")
+        line("public byte[] getBytez(int address, int max) { return getBytes(address, strlen(address)); }")
         line("public String getStringz(int address, java.nio.charset.Charset charset) { return new java.lang.String(getBytez(address), charset); }")
-        line("public String getStringz(int address) { return getStringz(address, java.nio.charset.Charset.forName(\"UTF-8\")); }")
+        line("public String getStringz(int address) { return getStringz(address, UTF_8); }")
     }
 
     fun dump(func: WasmFunc): Indenter = Indenter {
@@ -409,7 +389,7 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
     }
 
     override fun Indenter.writeOps() {
-        line("private int b2i(boolean v) { return v ? 1 : 0; }")
+        line("private int b2i(boolean v) { return ${ternary("v", "1", "0")}; }")
 
         line("private void TODO() { throw new RuntimeException(); }")
         line("private int TODO_i32() { throw new RuntimeException(); }")
@@ -464,19 +444,25 @@ class JavaExporter(module: WasmModule) : Exporter(module) {
         line("private long Op_i64_load32_s(int address, int offset, int align) { return (long)heap.getInt(checkAddressRead(address, offset, align, 4)); }")
         line("private long Op_i64_load32_u(int address, int offset, int align) { return (long)heap.getInt(checkAddressRead(address, offset, align, 4)) & 0xFFFFFFFFL; }")
 
-        line("private void Op_i32_store(int address, int offset, int align, int value)") {
-            //line("if (address + offset == 1109175052) System.out.println(\"write \" + address + \"=\" + value);")
-            //line("System.out.println(\"write \" + address + \"=\" + value);")
-            line("heap.putInt(checkAddressWrite(address, offset, align, 4), value);")
-        }
+        line("private void Op_i32_store(int address, int offset, int align, int value) { heap.putInt(checkAddressWrite(address, offset, align, 4), value); }")
         line("private void Op_i64_store(int address, int offset, int align, long value) { heap.putLong(checkAddressWrite(address, offset, align, 8), value); }")
         line("private void Op_f32_store(int address, int offset, int align, float value) { heap.putFloat(checkAddressWrite(address, offset, align, 4), value); }")
         line("private void Op_f64_store(int address, int offset, int align, double value) { heap.putDouble(checkAddressWrite(address, offset, align, 8), value); }")
-        line("private void Op_i32_store8(int address, int offset, int align, int value) { heap.put(checkAddressWrite(address, offset, align, 1), (byte)value); }")
-        line("private void Op_i32_store16(int address, int offset, int align, int value) { heap.putShort(checkAddressWrite(address, offset, align, 2), (short)value); }")
-        line("private void Op_i64_store8(int address, int offset, int align, long value) { Op_i32_store8(address, offset, align, (int)value); }")
-        line("private void Op_i64_store16(int address, int offset, int align, long value) { Op_i32_store16(address, offset, align, (int)value); }")
-        line("private void Op_i64_store32(int address, int offset, int align, long value) { Op_i32_store(address, offset, align, (int)value); }")
+
+        fun iopw_type(op: WasmOp, type: WasmType, gen: () -> String) =
+            iop(op, void, int("address"), int("offset"), int("align"), type("value")) { gen() }
+
+        iopw_type(
+            WasmOp.Op_i32_store8,
+            int
+        ) { "heap.put(checkAddressWrite(address, offset, align, 1), ${cast_byte("value")});" }
+        iopw_type(
+            WasmOp.Op_i32_store16,
+            int
+        ) { "heap.putShort(checkAddressWrite(address, offset, align, 2), ${cast_short("value")});" }
+        iopw_type(WasmOp.Op_i64_store8, long) { "Op_i32_store8(address, offset, align, ${cast_int("value")});" }
+        iopw_type(WasmOp.Op_i64_store16, long) { "Op_i32_store16(address, offset, align, ${cast_int("value")});" }
+        iopw_type(WasmOp.Op_i64_store32, long) { "Op_i32_store(address, offset, align, ${cast_int("value")});" }
         //Op_memory_size
         //Op_memory_grow
         //Op_i32_const
