@@ -378,6 +378,7 @@ open class BaseIntegrationTest {
     val JDK_IMAGE = "openjdk:8-jdk-alpine3.7"
     val GCC_IMAGE = "frolvlad/alpine-gcc:latest"
     val EMCC_IMAGE = "apiaryio/emcc:1.37"
+    //val EMCC_IMAGE = "emscripten/emsdk:3.1.41"
 
     init {
         println("ROOT: " + root.absolutePath)

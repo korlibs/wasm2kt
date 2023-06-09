@@ -5,6 +5,8 @@ import korlibs.io.lang.invalidOp
 import korlibs.io.stream.*
 import java.util.LinkedHashMap
 
+// https://webassembly.github.io/spec/core/_download/WebAssembly.pdf
+
 class WasmReader {
     fun toModule() = WasmModule(
         functions = functions.values.toList(),
@@ -81,6 +83,7 @@ class WasmReader {
         //println("available: $available")
     }
 
+    // 5.5.2 Sections
     fun SyncStream.readSection() {
         val type = readLEB128()
         val len = readLEB128()
@@ -88,14 +91,23 @@ class WasmReader {
         //println("$type")
         content.apply {
             when (type) {
+                0 -> {
+                    val name = readStringVL()
+                    println("Unsupported custom section $type '$name'")
+                    //TODO("Unsupported custom section '$name'")
+                }
                 1 -> readTypesSection()
                 2 -> readImportSection()
                 3 -> readFunctionSection()
+                //4 -> TODO("Unsupported table section")
+                //5 -> TODO("Memory section")
                 6 -> readGlobalSection()
                 7 -> readExportSection()
+                //8 -> TODO("Start section")
                 9 -> readElementSection()
                 10 -> readCodeSection()
                 11 -> readDataSection()
+                //12 -> TODO("Data count section")
                 else -> println("Unsupported section $type")
             }
         }

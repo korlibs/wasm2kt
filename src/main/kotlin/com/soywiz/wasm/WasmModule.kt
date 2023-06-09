@@ -9,10 +9,12 @@ class WasmModule(
 ) {
     val functionsByName = functions.associateBy { it.name }
     val globalsByIndex = globals.associateBy { it.index }
+    fun getFunction(item: Int): WasmFunc = functions[item]
+    fun getFunction(item: String): WasmFunc = functionsByName[item] ?: error("Can't find function $item")
     fun getFunction(item: Any): WasmFunc {
         return when (item) {
-            is Int -> functions[item]
-            is String -> functionsByName[item] ?: error("Can't find function $item")
+            is Int -> getFunction(item)
+            is String -> getFunction(item)
             else -> TODO("getFunction($item)")
         }
     }
