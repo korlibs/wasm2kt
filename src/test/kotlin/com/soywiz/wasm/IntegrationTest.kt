@@ -1,10 +1,11 @@
 package com.soywiz.wasm
 
-import com.soywiz.korio.async.*
-import com.soywiz.korio.stream.*
-import com.soywiz.korio.util.*
-import com.soywiz.korio.vfs.*
 import com.soywiz.wasm.exporter.*
+import korlibs.crypto.encoding.hex
+import korlibs.io.file.std.localCurrentDirVfs
+import korlibs.io.file.std.uniVfs
+import korlibs.io.stream.openSync
+import kotlinx.coroutines.runBlocking
 import java.security.*
 import kotlin.test.*
 
@@ -236,7 +237,7 @@ class IntegrationTest : BaseIntegrationTest() {
     @Test
     fun testNanoSvg() {
         runBlocking {
-            localCurrentDirVfs["samples/nanosvg"].copyToTree(root)
+            localCurrentDirVfs["samples/nanosvg"].copyToRecursively(root)
         }
         val svgPng = root["svg.png"]
         val checkOutput = suspend {

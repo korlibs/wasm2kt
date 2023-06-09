@@ -1,10 +1,10 @@
 package com.soywiz.wasm.exporter
 
-import com.soywiz.korio.error.*
-import com.soywiz.korio.util.*
 import com.soywiz.wasm.*
 import com.soywiz.wasm.util.*
 import com.soywiz.wasm.util.Indenter
+import korlibs.io.lang.invalidOp
+import korlibs.io.lang.quoted
 
 open class KotlinJvmExporter(module: WasmModule) : JvmExporter(module) {
     override fun langNameAllocator() = NameAllocator {

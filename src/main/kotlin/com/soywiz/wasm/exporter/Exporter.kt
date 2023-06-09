@@ -1,10 +1,11 @@
 package com.soywiz.wasm.exporter
 
-import com.soywiz.korio.error.*
-import com.soywiz.korio.util.*
 import com.soywiz.wasm.*
 import com.soywiz.wasm.util.Indenter
 import com.soywiz.wasm.util.*
+import korlibs.io.lang.invalidOp
+import korlibs.io.lang.splitInChunks
+import korlibs.memory.nextAlignedTo
 import java.util.*
 
 data class ExportConfig(

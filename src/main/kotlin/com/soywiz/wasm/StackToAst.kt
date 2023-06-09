@@ -1,7 +1,7 @@
 package com.soywiz.wasm
 
-import com.soywiz.kds.*
-import com.soywiz.korio.error.*
+import korlibs.datastructure.Stack
+import korlibs.io.lang.invalidOp
 
 enum class FlowKind(val keyword: String) {
     BREAK("break"), CONTINUE("continue")
@@ -229,7 +229,7 @@ fun WasmExpr.toAst2(
             }
             is WasmInstruction.CALL -> {
                 val func = ctx.wasm.functions[i.funcIdx]
-                        ?: com.soywiz.korio.error.invalidOp("Can't find function ${i.funcIdx}")
+                        ?: invalidOp("Can't find function ${i.funcIdx}")
                 //println("CALL $func")
                 val nargs = func.type.args.count()
                 stackPush(Wast.CALL(func.fwt, (0 until nargs).map { stackPop() }.reversed()))
@@ -240,7 +240,7 @@ fun WasmExpr.toAst2(
             is WasmInstruction.CALL_INDIRECT -> {
                 val type =
                     (ctx.wasm.types.getOrNull(i.typeIdx) as? WasmType.Function)
-                            ?: com.soywiz.korio.error.invalidOp("Can't find type ${i.typeIdx}")
+                            ?: invalidOp("Can't find type ${i.typeIdx}")
                 //println("CALL $func")
                 val nargs = type.args.size
                 val address = stackPop()

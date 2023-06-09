@@ -1,8 +1,8 @@
 package com.soywiz.wasm
 
-import com.soywiz.korio.*
-import com.soywiz.korio.stream.*
-import com.soywiz.korio.vfs.*
+import korlibs.io.Korio
+import korlibs.io.file.std.resourcesVfs
+import korlibs.io.stream.openSync
 import java.io.*
 
 object EncodeWasm {

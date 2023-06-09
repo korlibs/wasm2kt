@@ -1,8 +1,9 @@
 package com.soywiz.wasm
 
-import com.soywiz.kds.*
-import com.soywiz.korio.error.*
-import com.soywiz.korio.util.*
+import korlibs.datastructure.*
+import korlibs.io.lang.invalidOp
+import korlibs.io.lang.substr
+import korlibs.io.util.*
 
 /**
  * This WAST file format is useful for two things:
@@ -509,7 +510,7 @@ open class WastReader {
                             }
                         }
                         val defaultLabel = labels.last()
-                        val cases = labels.dropLast(1).withIndex().toList().filter { it.value != defaultLabel }
+                        val cases = labels.dropLast(1).withIndex().filter { it.value != defaultLabel }
                         Wast.BR_TABLE(cases, defaultLabel, expr(cond, ctx))
                     }
                     WasmOp.Op_block, WasmOp.Op_loop -> {
@@ -686,7 +687,7 @@ open class WastReader {
     fun StrReader.wastTokenize(): List<Token> {
         val out = arrayListOf<Token>()
         loop@ while (!eof) {
-            val peek = peek()
+            val peek = peekChar()
             when (peek) {
                 ' ', '\t', '\r', '\n' -> {
                     readChar() // skip
@@ -698,7 +699,7 @@ open class WastReader {
                 }
                 '(' -> run {
                     read()
-                    if (peek() == ';') {
+                    if (peekChar() == ';') {
                         readChar()
                         val comment = readUntil(";)")
                         out += COMMENT(comment)
@@ -712,7 +713,7 @@ open class WastReader {
                     readChar()
                     var str = StringBuilder()
                     loop@ while (!eof) {
-                        val pp = peek()
+                        val pp = peekChar()
                         when (pp) {
                             '\\' -> {
                                 val p1 = read()

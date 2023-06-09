@@ -1,6 +1,6 @@
 package com.soywiz.wasm
 
-import com.soywiz.korio.error.*
+import korlibs.io.lang.invalidOp
 
 enum class WasmOp(
     val id: Int,

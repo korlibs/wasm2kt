@@ -1,11 +1,13 @@
 package com.soywiz.wasm
 
-import com.soywiz.korio.*
-import com.soywiz.korio.stream.*
-import com.soywiz.korio.util.*
-import com.soywiz.korio.vfs.*
 import com.soywiz.wasm.exporter.*
 import com.soywiz.wasm.util.Indenter
+import korlibs.io.Korio
+import korlibs.io.file.extensionLC
+import korlibs.io.file.std.uniVfs
+import korlibs.io.lang.readString
+import korlibs.io.stream.SyncStream
+import korlibs.io.stream.openSync
 import java.util.*
 
 object Wasm {
@@ -49,7 +51,7 @@ object Wasm {
 
         val module = when {
             fileContents.readString(0, 4) == "\u0000asm" ->
-                Wasm.read(fileContents.openSync())
+                read(fileContents.openSync())
             (fileContents.readString(0, 4) == "(mod") || (file.uniVfs.extensionLC == "wast") ->
                 WastReader().parseModule(fileContents.toString(Charsets.UTF_8))
             else -> TODO("Not a WASM or WAST file")

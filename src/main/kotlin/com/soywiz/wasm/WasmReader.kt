@@ -1,8 +1,8 @@
 package com.soywiz.wasm
 
-import com.soywiz.korio.error.*
-import com.soywiz.korio.lang.*
-import com.soywiz.korio.stream.*
+import korlibs.io.lang.UTF8
+import korlibs.io.lang.invalidOp
+import korlibs.io.stream.*
 import java.util.LinkedHashMap
 
 class WasmReader {
@@ -53,7 +53,7 @@ class WasmReader {
 
     fun SyncStream.readModule() {
         if (readString(4) != "\u0000asm") invalidOp("Not a WASM file")
-        readS32_le()
+        readS32LE()
         while (!eof) readSection()
 
 
@@ -368,8 +368,8 @@ class WasmReader {
             0x3F, 0x40 -> WasmInstruction.InsInt(oop, readU8())
             0x41 -> WasmInstruction.InsConst(oop, readLEB128S())
             0x42 -> WasmInstruction.InsConst(oop, readLEB128SLong())
-            0x43 -> WasmInstruction.InsConst(oop, readF32_le())
-            0x44 -> WasmInstruction.InsConst(oop, readF64_le())
+            0x43 -> WasmInstruction.InsConst(oop, readF64LE())
+            0x44 -> WasmInstruction.InsConst(oop, readF64LE())
             in 0x45..0xBf -> WasmInstruction.Ins(WasmOp[op])
             else -> invalidOp("Unsupported 0x%02X".format(op))
         }

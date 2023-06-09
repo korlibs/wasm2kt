@@ -1,8 +1,8 @@
 package com.soywiz.wasm
 
-import com.soywiz.korio.async.*
-import com.soywiz.korio.vfs.*
 import com.soywiz.wasm.exporter.*
+import korlibs.io.async.suspendTest
+import korlibs.io.file.std.resourcesVfs
 import org.junit.*
 
 class WastTest {
