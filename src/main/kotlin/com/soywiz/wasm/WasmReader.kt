@@ -158,7 +158,10 @@ class WasmReader {
         return when (type) {
             0x40 -> WasmType.void
             0x60 -> WasmType.Function(readVec { AstLocal(it, readType()) }, readVec { readType() })
+            0x6F -> TODO("externref")
+            0x70 -> TODO("funcref")
             0x7F -> WasmType.i32
+            0x7B -> WasmType.v128
             0x7E -> WasmType.i64
             0x7D -> WasmType.f32
             0x7C -> WasmType.f64

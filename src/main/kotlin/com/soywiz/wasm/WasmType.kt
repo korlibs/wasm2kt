@@ -46,6 +46,12 @@ interface WasmType {
         override val signature: String = "s"
     }
 
+    object v128 : WasmType {
+        override val id = 0
+        override fun toString() = "Vector128"
+        override val signature: String = "LVector128;"
+    }
+
     object i32 : WasmType {
         override val id = 1
         override fun toString() = "i32"
