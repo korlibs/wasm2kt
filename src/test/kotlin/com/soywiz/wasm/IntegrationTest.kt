@@ -22,8 +22,8 @@ class IntegrationTest : BaseIntegrationTest() {
                 return 0;
             }
             """,
-            optimization = 0
-            //optimization = 3
+            //optimization = 0
+            optimization = 3
         )
     }
 
@@ -438,6 +438,8 @@ open class BaseIntegrationTest {
             val classStr = JavaExporter(wasm).dump(ExportConfig(className = "Module")).toString()
             root["Module.java"].writeString(classStr)
             root["Module2.java"].writeString(classStr)
+
+            println("$classStr")
 
             // Java -> Class -> Execute
             val argsStr = args.joinToString(" ") { it }
