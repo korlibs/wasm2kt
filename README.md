@@ -1,3 +1,6 @@
+# Deprecated in favour of using WASM directly in Kotlin <https://github.com/korlibs/korge/tree/e617e70a6a35125e0f17a81910969ca5ea97072e/korge-core/src/korlibs/wasm>
+
+
 [![Build Status](https://travis-ci.org/soywiz/wasm2kt.svg?branch=master)](https://travis-ci.org/soywiz/wasm2kt)
 
 ### Summary
